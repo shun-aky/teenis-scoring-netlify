@@ -1,0 +1,44 @@
+# misc
+*.zip
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Build artifacts
+dist/
+dist-ts/
+build/
+.cache/
+.expo/
+
+# TypeScript
+*.tsbuildinfo
+
+# Logs
+*.log
+logs/
+*.pid
+*.seed
+*.pid.lock
+
+# IDE/editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env files (if you add secrets later)
+.env
+.env.local
+.env.*
