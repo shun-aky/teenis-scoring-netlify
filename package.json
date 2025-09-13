@@ -12,8 +12,12 @@
     "dev:mobile": "npm run -w mobile start",
     "build:core": "npm run -w @tennis/core build"
   },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  },
   "dependencies": {
     "jspdf": "^3.0.2",
     "jspdf-autotable": "^5.0.2"
   }
 }
+
