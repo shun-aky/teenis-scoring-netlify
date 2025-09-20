@@ -63,9 +63,7 @@ export default function App() {
       const copy = gs.slice();
       const g = { ...copy[modal.gameIndex] };
       copy[modal.gameIndex] = g;
-      // set point via core helper
       Core.setPoint(g, modal.pointIndex, modal.player, notation);
-      // attach actor (use `any` to avoid TS type mismatch on Core.Point)
       const pt = (g.points[modal.pointIndex] as any) || {};
       pt.actor = selected.actor;
       g.points[modal.pointIndex] = pt;
@@ -120,7 +118,6 @@ export default function App() {
     });
   }
 
-  // helper: map actor name to team letter "A"|"B" or null
   function actorToTeam(actor?: string) {
     if (!actor) return null;
     if (mode === "singles") {
@@ -134,7 +131,6 @@ export default function App() {
     }
   }
 
-  // All player names for actor selection
   function allPlayerNames(): string[] {
     if (mode === "singles") return [playerA, playerB];
     return [playerA1, playerA2, playerB1, playerB2];
@@ -148,354 +144,309 @@ export default function App() {
       if (mode === "doubles" && playerName) {
         g.serverPlayer = playerName;
       } else {
-        g.serverPlayer = undefined;
+        g.serverPlayer = team;
       }
       copy[gameIndex] = g;
       return copy;
     });
   }
 
+  // === Stats ===
+function calculateStats() {
+  let totalPointsA = 0,
+    totalPointsB = 0;
+  let errorsA = 0,
+    errorsB = 0;
 
-  // === Stats (teams + per-player detailed contributions) ===
-  function calculateStats() {
-    // Team-level
-    let totalPointsA = 0,
-      totalPointsB = 0;
-    let errorsA = 0,
-      errorsB = 0;
-    let firstServeAttempts = { A: 0, B: 0 };
-    let firstServeMakes = { A: 0, B: 0 };
-    let firstServeWins = { A: 0, B: 0 };
-    let secondServeAttempts = { A: 0, B: 0 };
-    let secondServeMakes = { A: 0, B: 0 };
-    let secondServeWins = { A: 0, B: 0 };
+  // Team serve aggregates
+  let firstServeAttempts = { A: 0, B: 0 };
+  let firstServeMakes = { A: 0, B: 0 };
+  let firstServeWins = { A: 0, B: 0 };
+  let secondServeAttempts = { A: 0, B: 0 };
+  let secondServeMakes = { A: 0, B: 0 };
+  let secondServeWins = { A: 0, B: 0 };
 
-    // Individual tracking (actor-based). We'll initialize for all possible players.
-    const indiv: Record<
-      string,
-      {
-        pointsMade: number; // points contributed (actor was on winning side)
-        errors: number; // actor committed error (O or N)
-        firstServePoints: number; // actor contributed to a point that was won on 1st serve
-        secondServePoints: number; // actor contributed to a point that was won on 2nd serve
-      }
-    > = {};
-
-    allPlayerNames().forEach((n) => {
-      indiv[n] = { pointsMade: 0, errors: 0, firstServePoints: 0, secondServePoints: 0 };
-    });
-
-    // iterate
-    games.forEach((game) => {
-      game.points.forEach((point, idx) => {
-        if (!point) return;
-        // team totals
-        if (point.player === "A") totalPointsA++;
-        else totalPointsB++;
-
-        // team errors (loser gets the error)
-        if (/O|N/.test(point.notation)) {
-          if (point.player === "A") errorsB++;
-          else errorsA++;
-        }
-
-        // actor details
-        const actor = (point as any).actor as string | undefined;
-        const actorTeam = actorToTeam(actor);
-
-        if (actor) {
-          // ensure exist
-          if (!indiv[actor]) indiv[actor] = { pointsMade: 0, errors: 0, firstServePoints: 0, secondServePoints: 0 };
-          // if actor made final action and was on winning team
-          if (actorTeam && actorTeam === point.player) {
-            indiv[actor].pointsMade++;
-          }
-          // if actor committed an error (notation shows O or N), count it
-          if (/O|N/.test(point.notation)) {
-            // actor is the one who performed last action -> they committed the error
-            indiv[actor].errors++;
-          }
-        }
-
-        // service info (team-level)
-        const server = game.server; // 'A' or 'B'
-        const isFirstServeGood = !game.serviceInfo[idx];
-
-        firstServeAttempts[server]++;
-        if (isFirstServeGood) {
-          firstServeMakes[server]++;
-          if (point.player === server) firstServeWins[server]++;
-          // attribute first-serve-win involvement to actor if actor belongs to winning team
-          if (actor && actorToTeam(actor) === point.player) {
-            indiv[actor] = indiv[actor] || { pointsMade: 0, errors: 0, firstServePoints: 0, secondServePoints: 0 };
-            indiv[actor].firstServePoints++;
-          }
-        } else {
-          secondServeAttempts[server]++;
-          secondServeMakes[server]++;
-          if (point.player === server) secondServeWins[server]++;
-          if (actor && actorToTeam(actor) === point.player) {
-            indiv[actor] = indiv[actor] || { pointsMade: 0, errors: 0, firstServePoints: 0, secondServePoints: 0 };
-            indiv[actor].secondServePoints++;
-          }
-        }
-      });
-    });
-
-    // build per-individual percentage summaries
-    const indivDetailed: Record<
-      string,
-      {
-        pointsMade: number;
-        errors: number;
-        pointsShareOfTeamPct: string;
-        firstServePoints: number;
-        firstServeContributionPct: string;
-        secondServePoints: number;
-        secondServeContributionPct: string;
-      }
-    > = {};
-
-    const teamTotals = { A: totalPointsA, B: totalPointsB };
-
-    for (const name of Object.keys(indiv)) {
-      const data = indiv[name];
-      const team = actorToTeam(name);
-      const teamFirstMakes = team ? firstServeMakes[team] : 0;
-      const teamSecondMakes = team ? secondServeMakes[team] : 0;
-      const teamPoints = team ? teamTotals[team] : 0;
-
-      indivDetailed[name] = {
-        pointsMade: data.pointsMade,
-        errors: data.errors,
-        pointsShareOfTeamPct:
-          teamPoints > 0 ? ((data.pointsMade / teamPoints) * 100).toFixed(1) + "%" : "0.0%",
-        firstServePoints: data.firstServePoints,
-        firstServeContributionPct:
-          teamFirstMakes > 0 ? ((data.firstServePoints / teamFirstMakes) * 100).toFixed(1) + "%" : "0.0%",
-        secondServePoints: data.secondServePoints,
-        secondServeContributionPct:
-          teamSecondMakes > 0 ? ((data.secondServePoints / teamSecondMakes) * 100).toFixed(1) + "%" : "0.0%",
-      };
+  // Per-player tracking (includes serve attempts/makes)
+  const indiv: Record<
+    string,
+    {
+      pointsMade: number;
+      errors: number;
+      firstServePoints: number; // points won on 1st serve when server's team won
+      secondServePoints: number; // points won on 2nd serve when server's team won
+      firstServeAttempts: number;
+      firstServeMakes: number;
+      secondServeAttempts: number;
+      secondServeMakes: number;
     }
+  > = {};
 
-    return {
-      totalPointsA,
-      totalPointsB,
-      errorsA,
-      errorsB,
-      firstServeAttempts,
-      firstServeMakes,
-      firstServeWins,
-      secondServeAttempts,
-      secondServeMakes,
-      secondServeWins,
-      indiv,
-      indivDetailed,
-      firstServeInPct: {
-        A: firstServeAttempts.A ? ((firstServeMakes.A / firstServeAttempts.A) * 100).toFixed(1) : "0.0",
-        B: firstServeAttempts.B ? ((firstServeMakes.B / firstServeAttempts.B) * 100).toFixed(1) : "0.0",
-      },
-      firstServeWinPct: {
-        A: firstServeMakes.A ? ((firstServeWins.A / firstServeMakes.A) * 100).toFixed(1) : "0.0",
-        B: firstServeMakes.B ? ((firstServeWins.B / firstServeMakes.B) * 100).toFixed(1) : "0.0",
-      },
-      secondServeInPct: {
-        A: secondServeAttempts.A ? ((secondServeMakes.A / secondServeAttempts.A) * 100).toFixed(1) : "0.0",
-        B: secondServeAttempts.B ? ((secondServeMakes.B / secondServeAttempts.B) * 100).toFixed(1) : "0.0",
-      },
-      secondServeWinPct: {
-        A: secondServeMakes.A ? ((secondServeWins.A / secondServeMakes.A) * 100).toFixed(1) : "0.0",
-        B: secondServeMakes.B ? ((secondServeWins.B / secondServeMakes.B) * 100).toFixed(1) : "0.0",
-      },
-    } as const;
+  allPlayerNames().forEach((n) => {
+    indiv[n] = {
+      pointsMade: 0,
+      errors: 0,
+      firstServePoints: 0,
+      secondServePoints: 0,
+      firstServeAttempts: 0,
+      firstServeMakes: 0,
+      secondServeAttempts: 0,
+      secondServeMakes: 0,
+    };
+  });
+
+  games.forEach((game) => {
+    game.points.forEach((point, idx) => {
+      if (!point) return;
+
+      // team totals
+      if (point.player === "A") totalPointsA++;
+      else totalPointsB++;
+
+      // team errors (loser gets the 'error' count)
+      if (/O|N/.test(point.notation)) {
+        if (point.player === "A") errorsB++;
+        else errorsA++;
+      }
+
+      // actor-based counts (points/errors)
+      const actor = (point as any).actor as string | undefined;
+      if (actor && actorToTeam(actor) === point.player) {
+        indiv[actor].pointsMade++;
+      }
+      if (actor && /O|N/.test(point.notation)) {
+        indiv[actor].errors++;
+      }
+
+      // Serve logic
+      const serverTeam = game.server; // 'A' | 'B'
+      // If serverPlayer explicitly set (doubles) use it; otherwise, in singles attribute to that player
+      const servingPlayerName =
+        (game as any).serverPlayer ??
+        (mode === "singles" ? (serverTeam === "A" ? playerA : playerB) : undefined);
+
+      const isFirstServeGood = !game.serviceInfo[idx]; // true => 1st in, false => 1st missed -> 2nd serve
+      const isDoubleFault = /DF/i.test(point.notation); // double fault hit on this point?
+
+      // --- Team-level serve attempts ---
+      firstServeAttempts[serverTeam]++;
+
+      // --- Individual-level: first serve attempt always increments for the server (if known) ---
+      if (servingPlayerName) {
+        indiv[servingPlayerName].firstServeAttempts++;
+      }
+
+      if (isFirstServeGood) {
+        // first serve was in
+        firstServeMakes[serverTeam]++;
+
+        if (servingPlayerName) {
+          indiv[servingPlayerName].firstServeMakes++;
+        }
+
+        if (point.player === serverTeam) {
+          // server's side won the point on 1st serve
+          firstServeWins[serverTeam]++;
+          if (servingPlayerName) indiv[servingPlayerName].firstServePoints++;
+        }
+      } else {
+        // first serve missed -> second serve happened (or DF)
+        secondServeAttempts[serverTeam]++;
+        if (servingPlayerName) {
+          indiv[servingPlayerName].secondServeAttempts++;
+        }
+
+        if (isDoubleFault) {
+          // double fault: second serve was missed — DO NOT increment secondServeMakes
+          // (point is awarded to receiver; we don't increment secondServeMakes or secondServeWins)
+          // note: we don't auto-increment indiv[servingPlayerName].errors here to avoid double-counting
+          // if an actor was already set; actor-based error handling remains in place above.
+        } else {
+          // second serve was in
+          secondServeMakes[serverTeam]++;
+          if (servingPlayerName) {
+            indiv[servingPlayerName].secondServeMakes++;
+          }
+
+          if (point.player === serverTeam) {
+            // server's side won the point on 2nd serve
+            secondServeWins[serverTeam]++;
+            if (servingPlayerName) indiv[servingPlayerName].secondServePoints++;
+          }
+        }
+      }
+    });
+  });
+
+  // build per-player summary (including per-player serve-in %)
+  const teamTotals = { A: totalPointsA, B: totalPointsB };
+  const indivDetailed: Record<string, any> = {};
+  for (const name of Object.keys(indiv)) {
+    const data = indiv[name];
+    const team = actorToTeam(name);
+    const teamFirstMakes = team ? firstServeMakes[team] : 0;
+    const teamSecondMakes = team ? secondServeMakes[team] : 0;
+    const teamPoints = team ? teamTotals[team] : 0;
+
+    indivDetailed[name] = {
+      pointsMade: data.pointsMade,
+      errors: data.errors,
+      pointsShareOfTeamPct: teamPoints > 0 ? ((data.pointsMade / teamPoints) * 100).toFixed(1) + "%" : "0.0%",
+      // server-point contributions (as before)
+      firstServePoints: data.firstServePoints,
+      firstServeContributionPct: data.firstServeAttempts > 0 ? ((data.firstServePoints / data.firstServeAttempts) * 100).toFixed(1) + "%" : "0.0%",
+      secondServePoints: data.secondServePoints,
+      secondServeContributionPct: data.secondServeAttempts > 0 ? ((data.secondServePoints / data.secondServeAttempts) * 100).toFixed(1) + "%" : "0.0%",
+      // NEW: per-player serve-in rates + raw attempts/makes
+      firstServeAttempts: data.firstServeAttempts,
+      firstServeMakes: data.firstServeMakes,
+      firstServeInPct: data.firstServeAttempts > 0 ? ((data.firstServeMakes / data.firstServeAttempts) * 100).toFixed(1) + "%" : "0.0%",
+      secondServeAttempts: data.secondServeAttempts,
+      secondServeMakes: data.secondServeMakes,
+      secondServeInPct: data.secondServeAttempts > 0 ? ((data.secondServeMakes / data.secondServeAttempts) * 100).toFixed(1) + "%" : "0.0%",
+    };
   }
+
+  return {
+    totalPointsA,
+    totalPointsB,
+    errorsA,
+    errorsB,
+    firstServeAttempts,
+    firstServeMakes,
+    firstServeWins,
+    secondServeAttempts,
+    secondServeMakes,
+    secondServeWins,
+    indivDetailed,
+    firstServeInPct: {
+      A: firstServeAttempts.A ? ((firstServeMakes.A / firstServeAttempts.A) * 100).toFixed(1) : "0.0",
+      B: firstServeAttempts.B ? ((firstServeMakes.B / firstServeAttempts.B) * 100).toFixed(1) : "0.0",
+    },
+    firstServeWinPct: {
+      A: firstServeMakes.A ? ((firstServeWins.A / firstServeMakes.A) * 100).toFixed(1) : "0.0",
+      B: firstServeMakes.B ? ((firstServeWins.B / firstServeMakes.B) * 100).toFixed(1) : "0.0",
+    },
+    secondServeInPct: {
+      A: secondServeAttempts.A ? ((secondServeMakes.A / secondServeAttempts.A) * 100).toFixed(1) : "0.0",
+      B: secondServeAttempts.B ? ((secondServeMakes.B / secondServeAttempts.B) * 100).toFixed(1) : "0.0",
+    },
+    secondServeWinPct: {
+      A: secondServeMakes.A ? ((secondServeWins.A / secondServeMakes.A) * 100).toFixed(1) : "0.0",
+      B: secondServeMakes.B ? ((secondServeWins.B / secondServeMakes.B) * 100).toFixed(1) : "0.0",
+    },
+  };
+}
+
+
 
   const stats = calculateStats();
 
-  // === PDF Export ===
-  function exportPDF() {
-    const doc = new jsPDF();
-    doc.setFontSize(18);
-    doc.text("Tennis Match Report", 105, 20, { align: "center" });
-
-    doc.setFontSize(12);
-    if (mode === "singles") {
-      doc.text(`Player A: ${playerA}`, 20, 40);
-      doc.text(`Player B: ${playerB}`, 20, 55);
-    } else {
-      doc.text(`Team A: ${playerA1} / ${playerA2}`, 20, 40);
-      doc.text(`Team B: ${playerB1} / ${playerB2}`, 20, 55);
-    }
-    doc.text(`Generated: ${new Date().toLocaleString()}`, 20, 70);
-
-    // Team summary
-    autoTable(doc, {
-      startY: 90,
-      head: [["Metric", mode === "singles" ? playerA : "Team A", mode === "singles" ? playerB : "Team B"]],
-      body: [
-        ["Points Won", stats.totalPointsA, stats.totalPointsB],
-        ["Errors (Out/Net)", stats.errorsA, stats.errorsB],
-        ["First Serve Makes", stats.firstServeMakes.A, stats.firstServeMakes.B],
-        ["First Serve In %", stats.firstServeInPct.A + "%", stats.firstServeInPct.B + "%"],
-        ["First Serve Win %", stats.firstServeWinPct.A + "%", stats.firstServeWinPct.B + "%"],
-        ["Second Serve Makes", stats.secondServeMakes.A, stats.secondServeMakes.B],
-        ["Second Serve In %", stats.secondServeInPct.A + "%", stats.secondServeInPct.B + "%"],
-        ["Second Serve Win %", stats.secondServeWinPct.A + "%", stats.secondServeWinPct.B + "%"],
-      ],
-      headStyles: { fillColor: [41, 128, 185], textColor: [255, 255, 255] },
-      styles: { halign: "center" },
-      columnStyles: { 0: { halign: "left" } },
-    });
-
-    // Per-game detailed point list (winner, notation, actor, service)
-    games.forEach((game, gi) => {
-      const rows = game.points
-        .map((pt, i) => {
-          if (!pt) return null;
-          const service = !game.serviceInfo[i] ? "1st In" : "2nd In";
-          const winnerLabel = pt.player === "A" ? (mode === "singles" ? playerA : "Team A") : mode === "singles" ? playerB : "Team B";
-          return [String(i + 1), winnerLabel, pt.notation, (pt as any).actor ?? "", service];
-        })
-        .filter(Boolean) as string[][];
-
-      if (rows.length) {
-        autoTable(doc, {
-          startY: doc.lastAutoTable?.finalY ? doc.lastAutoTable.finalY + 12 : undefined,
-          head: [[`Game ${gi + 1} (Server: ${game.server})`, "", "", "", ""]],
-          body: [["", `${mode === "singles" ? playerA : "Team A"}: ${game.gameScoreA}`, `${mode === "singles" ? playerB : "Team B"}: ${game.gameScoreB}`, "", ""]],
-          theme: "plain",
-        });
-
-        autoTable(doc, {
-          startY: doc.lastAutoTable?.finalY ? doc.lastAutoTable.finalY + 6 : undefined,
-          head: [["#", "Winner", "Notation", "Actor", "Service"]],
-          body: rows,
-          headStyles: { fillColor: [200, 200, 200] },
-          styles: { fontSize: 10, halign: "center" },
-        });
-      }
-    });
-
-    // Individual stats (if doubles show all 4; if singles show two)
-    const startY = doc.lastAutoTable?.finalY ? doc.lastAutoTable.finalY + 12 : undefined;
-    const indivNames = allPlayerNames();
-    const indivRows = indivNames.map((n) => {
-      const d = stats.indivDetailed?.[n];
-      if (!d) {
-        return [n, "0", "0.0%", "0", "0 (0.0%)", "0", "0 (0.0%)"];
-      }
-      return [
-        n,
-        String(d.pointsMade),
-        d.pointsShareOfTeamPct,
-        String(d.errors),
-        `${d.firstServePoints} (${d.firstServeContributionPct})`,
-        String(d.secondServePoints),
-        `${d.secondServeContributionPct}`,
-      ];
-    });
-
-    autoTable(doc, {
-      startY,
-      head: [["Player", "Points", "% of Team", "Errors", "1stServePts (share)", "2ndServePts", "2ndServe (share)"]],
-      body: indivRows,
-      headStyles: { fillColor: [41, 128, 185], textColor: [255, 255, 255] },
-      styles: { fontSize: 10, halign: "center" },
-      columnStyles: { 0: { halign: "left" } },
-    });
-
-    doc.save("match_report.pdf");
-  }
-
-  // short helper for display inside boxes (trim long names)
   function shortName(n?: string) {
     if (!n) return "";
     if (n.length <= 4) return n;
     return n.split(" ").map((s) => s[0]).join("") || n.slice(0, 4);
   }
 
+  // === PDF Export ===
+function exportPDF() {
+    const doc = new jsPDF();
+    doc.setFontSize(18);
+    doc.text("Tennis Match Report", 105, 20, { align: "center" });
+    doc.setFontSize(12);
+    doc.text(mode === "singles" ? `Player A: ${playerA} | Player B: ${playerB}` : `Team A: ${playerA1}/${playerA2} | Team B: ${playerB1}/${playerB2}`, 20, 40);
+    doc.text(`Generated: ${new Date().toLocaleString()}`, 20, 55);
+
+    // Summary
+    autoTable(doc, {
+      startY: 70,
+      head: [["Metric", "Team A", "Team B"]],
+      body: [
+        ["Points Won", stats.totalPointsA, stats.totalPointsB],
+        ["Errors", stats.errorsA, stats.errorsB],
+        ["1st Serve Makes", stats.firstServeMakes.A, stats.firstServeMakes.B],
+        ["1st Serve In %", stats.firstServeInPct.A + "%", stats.firstServeInPct.B + "%"],
+        ["1st Serve Win %", stats.firstServeWinPct.A + "%", stats.firstServeWinPct.B + "%"],
+        ["2nd Serve Makes", stats.secondServeMakes.A, stats.secondServeMakes.B],
+        ["2nd Serve In %", stats.secondServeInPct.A + "%", stats.secondServeInPct.B + "%"],
+        ["2nd Serve Win %", stats.secondServeWinPct.A + "%", stats.secondServeWinPct.B + "%"],
+      ],
+      headStyles: { fillColor: [41, 128, 185], textColor: [255, 255, 255] },
+    });
+
+    // Scoresheet grid
+    games.forEach((game, gi) => {
+      const cols = game.totalBoxes;
+      const rowA = ["Team A"], rowS = [game.serverPlayer], rowB = ["Team B"];
+      for (let i = 0; i < cols; i++) {
+        const pt = game.points[i] as any;
+        rowA.push(pt?.player === "A" ? `${pt.notation}${pt.actor ? " (" + shortName(pt.actor) + ")" : ""}` : "");
+        rowB.push(pt?.player === "B" ? `${pt.notation}${pt.actor ? " (" + shortName(pt.actor) + ")" : ""}` : "");
+        rowS.push(game.serviceInfo[i] ? "2" : "");
+      }
+      autoTable(doc, {
+        startY: (doc as any).lastAutoTable ? (doc as any).lastAutoTable.finalY + 15 : 100,
+        head: [[`Game ${gi + 1}  (Score: ${game.gameScoreA}-${game.gameScoreB})`, ...Array(cols - 1).fill("")]],
+        body: [rowA, rowS, rowB],
+        styles: { fontSize: 8, halign: "center", cellWidth: 15 },
+      });
+    });
+
+    // Individual stats
+    autoTable(doc, {
+      startY: (doc as any).lastAutoTable.finalY + 15,
+      head: [["Player", "Pts", "Errors", "% of Team", "1st Serve Pts", "1st Serve Win%", "1st Serve makes", "1st Serve In %", "2nd Serve Pts", "2nd Serve Win%", "2nd Serve makes", "2nd Serve In %"]],
+      body: Object.entries(stats.indivDetailed).map(([n, s]: any) => [n, s.pointsMade, s.errors, s.pointsShareOfTeamPct, s.firstServePoints, s.firstServeContributionPct, s.firstServeMakes, s.firstServeInPct, s.secondServePoints, s.secondServeContributionPct, s.secondServeMakes, s.secondServeInPct]),
+      headStyles: { fillColor: [41, 128, 185], textColor: [255, 255, 255] },
+      styles: { fontSize: 10 },
+    });
+
+    doc.save("match_report.pdf");
+  }
+
   return (
     <div className="container">
       <h1>Tennis Scoresheet (Web)</h1>
-
-      {/* Mode */}
+      {/* Mode selection */}
       <div style={{ marginBottom: 12 }}>
-        <label>
-          <input type="radio" checked={mode === "singles"} onChange={() => setMode("singles")} /> Singles
-        </label>
-        <label style={{ marginLeft: 12 }}>
-          <input type="radio" checked={mode === "doubles"} onChange={() => setMode("doubles")} /> Doubles
-        </label>
+        <label><input type="radio" checked={mode === "singles"} onChange={() => setMode("singles")} /> Singles</label>
+        <label style={{ marginLeft: 12 }}><input type="radio" checked={mode === "doubles"} onChange={() => setMode("doubles")} /> Doubles</label>
       </div>
 
       {/* Player inputs */}
       {mode === "singles" ? (
         <div className="players">
-          <div className="player-input">
-            <label>Player A:</label>
-            <input value={playerA} onChange={(e) => setPlayerA(e.target.value)} />
-          </div>
-          <div className="player-input">
-            <label>Player B:</label>
-            <input value={playerB} onChange={(e) => setPlayerB(e.target.value)} />
-          </div>
+          <div><label>Player A:</label><input value={playerA} onChange={(e) => setPlayerA(e.target.value)} /></div>
+          <div><label>Player B:</label><input value={playerB} onChange={(e) => setPlayerB(e.target.value)} /></div>
         </div>
       ) : (
         <div className="players">
-          <div className="player-input">
-            <label>A1:</label>
-            <input value={playerA1} onChange={(e) => setPlayerA1(e.target.value)} />
-          </div>
-          <div className="player-input">
-            <label>A2:</label>
-            <input value={playerA2} onChange={(e) => setPlayerA2(e.target.value)} />
-          </div>
-          <div className="player-input">
-            <label>B1:</label>
-            <input value={playerB1} onChange={(e) => setPlayerB1(e.target.value)} />
-          </div>
-          <div className="player-input">
-            <label>B2:</label>
-            <input value={playerB2} onChange={(e) => setPlayerB2(e.target.value)} />
-          </div>
+          <div><label>A1:</label><input value={playerA1} onChange={(e) => setPlayerA1(e.target.value)} /></div>
+          <div><label>A2:</label><input value={playerA2} onChange={(e) => setPlayerA2(e.target.value)} /></div>
+          <div><label>B1:</label><input value={playerB1} onChange={(e) => setPlayerB1(e.target.value)} /></div>
+          <div><label>B2:</label><input value={playerB2} onChange={(e) => setPlayerB2(e.target.value)} /></div>
         </div>
       )}
 
       <div className="controls">
-        <button className="btn" onClick={addGame}>
-          Add Game
-        </button>
-        <button className="btn secondary" onClick={clearSheet}>
-          Clear Sheet
-        </button>
-        <button className="btn" onClick={exportPDF}>
-          Export PDF
-        </button>
+        <button className="btn" onClick={addGame}>Add Game</button>
+        <button className="btn secondary" onClick={clearSheet}>Clear Sheet</button>
+        <button className="btn" onClick={exportPDF}>Export PDF</button>
       </div>
 
-      {/* Scoresheet */}
       <div className="scoresheet">
         {games.map((game, gi) => (
           <div className="game-row" key={gi}>
             <div className="points-container">
               {/* Player A row */}
               <div className="player-section">
-                <div className={"server-marker " + (game.server === "A" ? "active" : "")} onClick={() => toggleServer(gi, "A")}>
-                  {initials.A}
-                </div>
+                <div className={"server-marker " + (game.server === "A" ? "active" : "")} onClick={() => toggleServer(gi, "A")}>{initials.A}</div>
                 {Array.from({ length: game.totalBoxes }).map((_, i) => {
                   const p = game.points[i];
                   const filled = p && p.player === "A";
-                  const deuce = i >= 6 && i % 2 === 1;
                   return (
-                    <div
-                      key={"A-" + i}
-                      className={"point-box " + (filled ? "filled " : "") + (deuce ? "deuce" : "")}
-                      onClick={() => openPointInput(gi, i, "A")}
-                    >
+                    <div key={"A-" + i} className={"point-box " + (filled ? "filled " : "")} onClick={() => openPointInput(gi, i, "A")}>
                       {filled ? <span className="notation">{(p as any).notation}</span> : null}
-                      {(p as any)?.actor ? <span className="actor">{shortName((p as any).actor)}</span> : null}
+                      {filled && (p as any)?.actor ? <span className="actor">{shortName((p as any).actor)}</span> : null}
                     </div>
                   );
                 })}
@@ -503,89 +454,54 @@ export default function App() {
 
               {/* Service row */}
               <div className="service-section">
-                {mode === "doubles" && game.server === "A" && (
-                  <div>
-                    <label>Server:</label>
-                    <select
-                      value={game.serverPlayer || ""}
-                      onChange={(e) => setServer(gi, "A", e.target.value)}
-                    >
+                <div style={{ width: 25 }}>
+                  {mode === "doubles" && game.server === "A" && (
+                    <select value={game.serverPlayer || ""} onChange={(e) => setServer(gi, "A", e.target.value)}>
                       <option value="">--Select--</option>
                       <option value={playerA1}>{playerA1}</option>
                       <option value={playerA2}>{playerA2}</option>
                     </select>
-                  </div>
-                )}
-                {mode === "doubles" && game.server === "B" && (
-                  <div>
-                    <label>Server:</label>
-                    <select
-                      value={game.serverPlayer || ""}
-                      onChange={(e) => setServer(gi, "B", e.target.value)}
-                    >
+                  )}
+                  {mode === "doubles" && game.server === "B" && (
+                    <select value={game.serverPlayer || ""} onChange={(e) => setServer(gi, "B", e.target.value)}>
                       <option value="">--Select--</option>
                       <option value={playerB1}>{playerB1}</option>
                       <option value={playerB2}>{playerB2}</option>
                     </select>
+                  )}
+                </div>
+                {Array.from({ length: game.totalBoxes }).map((_, i) => (
+                  <div key={"S-" + i} className="service-box" onClick={() => toggleServiceInfo(gi, i)}>
+                    {game.serviceInfo[i] ? "●" : ""}
                   </div>
-                )}
+                ))}
               </div>
-
 
               {/* Player B row */}
               <div className="player-section">
-                <div className={"server-marker " + (game.server === "B" ? "active" : "")} onClick={() => toggleServer(gi, "B")}>
-                  {initials.B}
-                </div>
+                <div className={"server-marker " + (game.server === "B" ? "active" : "")} onClick={() => toggleServer(gi, "B")}>{initials.B}</div>
                 {Array.from({ length: game.totalBoxes }).map((_, i) => {
                   const p = game.points[i];
                   const filled = p && p.player === "B";
-                  const deuce = i >= 6 && i % 2 === 1;
                   return (
-                    <div
-                      key={"B-" + i}
-                      className={"point-box " + (filled ? "filled " : "") + (deuce ? "deuce" : "")}
-                      onClick={() => openPointInput(gi, i, "B")}
-                    >
+                    <div key={"B-" + i} className={"point-box " + (filled ? "filled " : "")} onClick={() => openPointInput(gi, i, "B")}>
                       {filled ? <span className="notation">{(p as any).notation}</span> : null}
-                      {(p as any)?.actor ? <span className="actor">{shortName((p as any).actor)}</span> : null}
+                      {filled && (p as any)?.actor ? <span className="actor">{shortName((p as any).actor)}</span> : null}
                     </div>
                   );
                 })}
               </div>
             </div>
 
-            {/* Game score */}
             <div className="game-score-container">
               <div className="score-inputs">
-                <input
-                  className="score-inp"
-                  type="number"
-                  min={0}
-                  max={99}
-                  value={game.gameScoreA}
-                  onChange={(e) => updateGameScore(gi, "A", parseInt(e.target.value || "0", 10))}
-                />
+                <input className="score-inp" type="number" min={0} max={99} value={game.gameScoreA} onChange={(e) => updateGameScore(gi, "A", parseInt(e.target.value || "0", 10))} />
                 <span className="hyphen">-</span>
-                <input
-                  className="score-inp"
-                  type="number"
-                  min={0}
-                  max={99}
-                  value={game.gameScoreB}
-                  onChange={(e) => updateGameScore(gi, "B", parseInt(e.target.value || "0", 10))}
-                />
+                <input className="score-inp" type="number" min={0} max={99} value={game.gameScoreB} onChange={(e) => updateGameScore(gi, "B", parseInt(e.target.value || "0", 10))} />
               </div>
-
-              <div style={{ display: "flex", flexDirection: "row", gap: "8px", marginTop: "8px" }}>
-                <button className="btn" style={{ background: "#28a745", padding: "4px 12px" }} title="Add 2 deuce boxes" onClick={() => addDeuceBoxes(gi)}>
-                  +
-                </button>
-                {game.totalBoxes > 8 && (
-                  <button className="btn" style={{ background: "#dc3545", padding: "4px 12px" }} title="Remove 2 deuce boxes" onClick={() => removeDeuceBoxes(gi)}>
-                    −
-                  </button>
-                )}
+              <div style={{ marginTop: 8 }}>
+                <button className="btn" style={{ background: "#28a745" }} onClick={() => addDeuceBoxes(gi)}>+</button>
+                {game.totalBoxes > 8 && <button className="btn" style={{ background: "#dc3545" }} onClick={() => removeDeuceBoxes(gi)}>−</button>}
               </div>
             </div>
           </div>
@@ -651,6 +567,7 @@ export default function App() {
 
         {/* Individual stats (doubles) or per-player (singles) */}
         <h3 style={{ marginTop: 16 }}>{mode === "singles" ? "Player Stats" : "Individual Stats (per player)"}</h3>
+
         <table className="stats-table" style={{ marginTop: 8 }}>
           <thead>
             <tr>
@@ -659,9 +576,15 @@ export default function App() {
               <th>% of Team</th>
               <th>Errors</th>
               <th>1st Serve Pts</th>
-              <th>1st Serve %</th>
+              <th>1st Serve Win %</th>
+              <th>1st Serve Makes</th>
+              <th>1st Serve Attempts</th>
+              <th>1st Serve in %</th>
               <th>2nd Serve Pts</th>
-              <th>2nd Serve %</th>
+              <th>2nd Serve Win %</th>
+              <th>2nd Serve Makes</th>
+              <th>2nd Serve Attempts</th>
+              <th>2nd Serve in %</th>
             </tr>
           </thead>
           <tbody>
@@ -677,6 +600,12 @@ export default function App() {
                     <td>0</td>
                     <td>0.0%</td>
                     <td>0</td>
+                    <td>0</td>
+                    <td>0.0%</td>
+                    <td>0</td>
+                    <td>0.0%</td>
+                    <td>0</td>
+                    <td>0</td>
                     <td>0.0%</td>
                   </tr>
                 );
@@ -689,8 +618,14 @@ export default function App() {
                   <td>{d.errors}</td>
                   <td>{d.firstServePoints}</td>
                   <td>{d.firstServeContributionPct}</td>
+                  <td>{d.firstServeMakes}</td>
+                  <td>{d.firstServeAttempts}</td>
+                  <td>{d.firstServeInPct}</td>
                   <td>{d.secondServePoints}</td>
                   <td>{d.secondServeContributionPct}</td>
+                  <td>{d.secondServeMakes}</td>
+                  <td>{d.secondServeAttempts}</td>
+                  <td>{d.secondServeInPct}</td>
                 </tr>
               );
             })}
