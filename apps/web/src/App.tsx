@@ -3,7 +3,8 @@ import * as Core from "@tennis/core";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
-type ShotSel = { hand?: string; shot?: string; result?: string; actor?: string };
+// type ShotSel = { hand?: string; shot?: string; result?: string; actor?: string };
+type ShotSel = { hand?: string; shot?: string; result?: string; actor?: string; returner?: string };
 
 interface ModalState {
   open: boolean;
@@ -53,24 +54,44 @@ export default function App() {
     setModal(null);
   }
   function confirmInput() {
-    if (!modal) return;
-    const notation = `${selected.hand ?? ""}${selected.shot ?? ""}${selected.result ?? ""}`;
-    if (!notation) {
-      setModal(null);
-      return;
-    }
-    setGames((gs) => {
-      const copy = gs.slice();
-      const g = { ...copy[modal.gameIndex] };
-      copy[modal.gameIndex] = g;
-      Core.setPoint(g, modal.pointIndex, modal.player, notation);
-      const pt = (g.points[modal.pointIndex] as any) || {};
-      pt.actor = selected.actor;
-      g.points[modal.pointIndex] = pt;
-      return copy;
-    });
+  if (!modal) return;
+  const notation = `${selected.hand ?? ""}${selected.shot ?? ""}${selected.result ?? ""}`;
+  if (!notation) {
     setModal(null);
+    return;
   }
+  setGames((gs) => {
+    const copy = gs.slice();
+    const g = { ...copy[modal.gameIndex] };
+    copy[modal.gameIndex] = g;
+    Core.setPoint(g, modal.pointIndex, modal.player, notation);
+    const pt = (g.points[modal.pointIndex] as any) || {};
+    pt.actor = selected.actor;
+    pt.returner = selected.returner; // Store returner info
+    g.points[modal.pointIndex] = pt;
+    return copy;
+  });
+  setModal(null);
+}
+  // function confirmInput() {
+  //   if (!modal) return;
+  //   const notation = `${selected.hand ?? ""}${selected.shot ?? ""}${selected.result ?? ""}`;
+  //   if (!notation) {
+  //     setModal(null);
+  //     return;
+  //   }
+  //   setGames((gs) => {
+  //     const copy = gs.slice();
+  //     const g = { ...copy[modal.gameIndex] };
+  //     copy[modal.gameIndex] = g;
+  //     Core.setPoint(g, modal.pointIndex, modal.player, notation);
+  //     const pt = (g.points[modal.pointIndex] as any) || {};
+  //     pt.actor = selected.actor;
+  //     g.points[modal.pointIndex] = pt;
+  //     return copy;
+  //   });
+  //   setModal(null);
+  // }
 
   function toggleServer(gameIndex: number, player: Core.Player) {
     setGames((gs) => {
@@ -152,7 +173,292 @@ export default function App() {
   }
 
   // === Stats ===
-  function calculateStats() {
+//   function calculateStats() {
+//   let totalPointsA = 0,
+//     totalPointsB = 0;
+//   let errorsA = 0,
+//     errorsB = 0;
+
+//   // Team serve aggregates
+//   let firstServeAttempts = { A: 0, B: 0 };
+//   let firstServeMakes = { A: 0, B: 0 };
+//   let firstServeWins = { A: 0, B: 0 };
+//   let secondServeAttempts = { A: 0, B: 0 };
+//   let secondServeMakes = { A: 0, B: 0 };
+//   let secondServeWins = { A: 0, B: 0 };
+
+//   // Per-player tracking (includes serve attempts/makes)
+//   const indiv: Record<
+//     string,
+//     {
+//       pointsMade: number;
+//       errors: number;
+//       firstServePoints: number;
+//       secondServePoints: number;
+//       firstServeAttempts: number;
+//       firstServeMakes: number;
+//       secondServeAttempts: number;
+//       secondServeMakes: number;
+//       shots: Record<string, { points: number; errors: number }>;
+//       firstReturnIn: number;
+//       firstReturnOut: number;
+//       firstReturnPointsWon: number;
+//       firstReturnOpportunities: number;
+//       secondReturnIn: number;
+//       secondReturnOut: number;
+//       secondReturnPointsWon: number;
+//       secondReturnOpportunities: number;
+//     }
+//   > = {};
+
+//   allPlayerNames().forEach((n) => {
+//     indiv[n] = {
+//       pointsMade: 0,
+//       errors: 0,
+//       firstServePoints: 0,
+//       secondServePoints: 0,
+//       firstServeAttempts: 0,
+//       firstServeMakes: 0,
+//       secondServeAttempts: 0,
+//       secondServeMakes: 0,
+//       shots: {},
+//       firstReturnIn: 0,
+//       firstReturnOut: 0,
+//       firstReturnPointsWon: 0,
+//       firstReturnOpportunities: 0,
+//       secondReturnIn: 0,
+//       secondReturnOut: 0,
+//       secondReturnPointsWon: 0,
+//       secondReturnOpportunities: 0,
+//     };
+//   });
+
+//   games.forEach((game) => {
+//     game.points.forEach((point, idx) => {
+//       if (!point) return;
+
+//       // team totals
+//       if (point.player === "A") totalPointsA++;
+//       else totalPointsB++;
+
+//       // team errors (loser gets the 'error' count)
+//       if (/O|N/.test(point.notation)) {
+//         if (point.player === "A") errorsB++;
+//         else errorsA++;
+//       }
+
+//       // actor-based counts (points/errors)
+//       const actor = (point as any).actor as string | undefined;
+//       if (actor && actorToTeam(actor) === point.player) {
+//         indiv[actor].pointsMade++;
+        
+//         // Track shot type for points - extract shot from notation (e.g., "FLO" -> "L", "BSA" -> "S")
+//         const notation = point.notation;
+//         const hand = notation.match(/^[FB]/)?.[0] || "";
+//         const shot = notation.replace(/^[FB]/, "").replace(/[AON]$/, "") || "Unknown";
+//         const shotLabel = hand + shot; // e.g., "FL", "BS", "FV"
+        
+//         if (!indiv[actor].shots[shotLabel]) {
+//           indiv[actor].shots[shotLabel] = { points: 0, errors: 0 };
+//         }
+//         indiv[actor].shots[shotLabel].points++;
+//       }
+//       if (actor && /O|N/.test(point.notation)) {
+//         indiv[actor].errors++;
+        
+//         // Track shot type for errors
+//         const notation = point.notation;
+//         const hand = notation.match(/^[FB]/)?.[0] || "";
+//         const shot = notation.replace(/^[FB]/, "").replace(/[AON]$/, "") || "Unknown";
+//         const shotLabel = hand + shot; // e.g., "FL", "BS", "FV"
+        
+//         if (!indiv[actor].shots[shotLabel]) {
+//           indiv[actor].shots[shotLabel] = { points: 0, errors: 0 };
+//         }
+//         indiv[actor].shots[shotLabel].errors++;
+//       }
+
+//       // Serve logic
+//       const serverTeam = game.server; // 'A' | 'B'
+//       const receiverTeam = serverTeam === "A" ? "B" : "A";
+      
+//       // If serverPlayer explicitly set (doubles) use it; otherwise, in singles attribute to that player
+//       const servingPlayerName =
+//         (game as any).serverPlayer ??
+//         (mode === "singles" ? (serverTeam === "A" ? playerA : playerB) : undefined);
+
+//       const isFirstServeGood = !game.serviceInfo[idx]; // true => 1st in, false => 1st missed -> 2nd serve
+//       const isDoubleFault = /DF/i.test(point.notation); // double fault hit on this point?
+//       const isServiceAce = /SrA/i.test(point.notation); // service ace
+
+//       // --- Team-level serve attempts ---
+//       firstServeAttempts[serverTeam]++;
+
+//       // --- Individual-level: first serve attempt always increments for the server (if known) ---
+//       if (servingPlayerName) {
+//         indiv[servingPlayerName].firstServeAttempts++;
+//       }
+
+//       if (isFirstServeGood) {
+//         // first serve was in
+//         firstServeMakes[serverTeam]++;
+
+//         if (servingPlayerName) {
+//           indiv[servingPlayerName].firstServeMakes++;
+//         }
+
+//         // Track return stats for receiver(s)
+//         const receiverNames = mode === "singles" 
+//           ? [receiverTeam === "A" ? playerA : playerB]
+//           : receiverTeam === "A" ? [playerA1, playerA2] : [playerB1, playerB2];
+        
+//         receiverNames.forEach((receiverName) => {
+//           indiv[receiverName].firstReturnOpportunities++;
+          
+//           if (isServiceAce) {
+//             // Return was out (couldn't return the ace)
+//             indiv[receiverName].firstReturnOut++;
+//           } else {
+//             // Return was in
+//             indiv[receiverName].firstReturnIn++;
+            
+//             // Check if receiver won the point
+//             if (point.player === receiverTeam) {
+//               indiv[receiverName].firstReturnPointsWon++;
+//             }
+//           }
+//         });
+
+//         if (point.player === serverTeam) {
+//           // server's side won the point on 1st serve
+//           firstServeWins[serverTeam]++;
+//           if (servingPlayerName) indiv[servingPlayerName].firstServePoints++;
+//         }
+//       } else {
+//         // first serve missed -> second serve happened (or DF)
+//         secondServeAttempts[serverTeam]++;
+//         if (servingPlayerName) {
+//           indiv[servingPlayerName].secondServeAttempts++;
+//         }
+
+//         if (isDoubleFault) {
+//           // double fault: second serve was missed — DO NOT increment secondServeMakes
+//           // (point is awarded to receiver; we don't increment secondServeMakes or secondServeWins)
+//           // note: we don't auto-increment indiv[servingPlayerName].errors here to avoid double-counting
+//           // if an actor was already set; actor-based error handling remains in place above.
+//         } else {
+//           // second serve was in
+//           secondServeMakes[serverTeam]++;
+//           if (servingPlayerName) {
+//             indiv[servingPlayerName].secondServeMakes++;
+//           }
+
+//           // Track return stats for receiver(s) on second serve
+//           const receiverNames = mode === "singles" 
+//             ? [receiverTeam === "A" ? playerA : playerB]
+//             : receiverTeam === "A" ? [playerA1, playerA2] : [playerB1, playerB2];
+          
+//           receiverNames.forEach((receiverName) => {
+//             indiv[receiverName].secondReturnOpportunities++;
+            
+//             if (isServiceAce) {
+//               // Return was out (couldn't return the ace)
+//               indiv[receiverName].secondReturnOut++;
+//             } else {
+//               // Return was in
+//               indiv[receiverName].secondReturnIn++;
+              
+//               // Check if receiver won the point
+//               if (point.player === receiverTeam) {
+//                 indiv[receiverName].secondReturnPointsWon++;
+//               }
+//             }
+//           });
+
+//           if (point.player === serverTeam) {
+//             // server's side won the point on 2nd serve
+//             secondServeWins[serverTeam]++;
+//             if (servingPlayerName) indiv[servingPlayerName].secondServePoints++;
+//           }
+//         }
+//       }
+//     });
+//   });
+
+//   // build per-player summary (including per-player serve-in %)
+//   const teamTotals = { A: totalPointsA, B: totalPointsB };
+//   const indivDetailed: Record<string, any> = {};
+//   for (const name of Object.keys(indiv)) {
+//     const data = indiv[name];
+//     const team = actorToTeam(name);
+//     const teamFirstMakes = team ? firstServeMakes[team] : 0;
+//     const teamSecondMakes = team ? secondServeMakes[team] : 0;
+//     const teamPoints = team ? teamTotals[team] : 0;
+
+//     indivDetailed[name] = {
+//       pointsMade: data.pointsMade,
+//       errors: data.errors,
+//       pointsShareOfTeamPct: teamPoints > 0 ? ((data.pointsMade / teamPoints) * 100).toFixed(1) + "%" : "0.0%",
+//       // server-point contributions (as before)
+//       firstServePoints: data.firstServePoints,
+//       firstServeContributionPct: data.firstServeAttempts > 0 ? ((data.firstServePoints / data.firstServeAttempts) * 100).toFixed(1) + "%" : "0.0%",
+//       secondServePoints: data.secondServePoints,
+//       secondServeContributionPct: data.secondServeAttempts > 0 ? ((data.secondServePoints / data.secondServeAttempts) * 100).toFixed(1) + "%" : "0.0%",
+//       // per-player serve-in rates + raw attempts/makes
+//       firstServeAttempts: data.firstServeAttempts,
+//       firstServeMakes: data.firstServeMakes,
+//       firstServeInPct: data.firstServeAttempts > 0 ? ((data.firstServeMakes / data.firstServeAttempts) * 100).toFixed(1) + "%" : "0.0%",
+//       secondServeAttempts: data.secondServeAttempts,
+//       secondServeMakes: data.secondServeMakes,
+//       secondServeInPct: data.secondServeAttempts > 0 ? ((data.secondServeMakes / data.secondServeAttempts) * 100).toFixed(1) + "%" : "0.0%",
+//       shots: data.shots,
+//       // Return stats
+//       firstReturnIn: data.firstReturnIn,
+//       firstReturnOut: data.firstReturnOut,
+//       firstReturnOpportunities: data.firstReturnOpportunities,
+//       firstReturnInPct: data.firstReturnOpportunities > 0 ? ((data.firstReturnIn / data.firstReturnOpportunities) * 100).toFixed(1) + "%" : "0.0%",
+//       firstReturnPointsWon: data.firstReturnPointsWon,
+//       firstReturnWinPct: data.firstReturnOpportunities > 0 ? ((data.firstReturnPointsWon / data.firstReturnOpportunities) * 100).toFixed(1) + "%" : "0.0%",
+//       secondReturnIn: data.secondReturnIn,
+//       secondReturnOut: data.secondReturnOut,
+//       secondReturnOpportunities: data.secondReturnOpportunities,
+//       secondReturnInPct: data.secondReturnOpportunities > 0 ? ((data.secondReturnIn / data.secondReturnOpportunities) * 100).toFixed(1) + "%" : "0.0%",
+//       secondReturnPointsWon: data.secondReturnPointsWon,
+//       secondReturnWinPct: data.secondReturnOpportunities > 0 ? ((data.secondReturnPointsWon / data.secondReturnOpportunities) * 100).toFixed(1) + "%" : "0.0%",
+//     };
+//   }
+
+//   return {
+//     totalPointsA,
+//     totalPointsB,
+//     errorsA,
+//     errorsB,
+//     firstServeAttempts,
+//     firstServeMakes,
+//     firstServeWins,
+//     secondServeAttempts,
+//     secondServeMakes,
+//     secondServeWins,
+//     indivDetailed,
+//     firstServeInPct: {
+//       A: firstServeAttempts.A ? ((firstServeMakes.A / firstServeAttempts.A) * 100).toFixed(1) : "0.0",
+//       B: firstServeAttempts.B ? ((firstServeMakes.B / firstServeAttempts.B) * 100).toFixed(1) : "0.0",
+//     },
+//     firstServeWinPct: {
+//       A: firstServeMakes.A ? ((firstServeWins.A / firstServeMakes.A) * 100).toFixed(1) : "0.0",
+//       B: firstServeMakes.B ? ((firstServeWins.B / firstServeMakes.B) * 100).toFixed(1) : "0.0",
+//     },
+//     secondServeInPct: {
+//       A: secondServeAttempts.A ? ((secondServeMakes.A / secondServeAttempts.A) * 100).toFixed(1) : "0.0",
+//       B: secondServeAttempts.B ? ((secondServeMakes.B / secondServeAttempts.B) * 100).toFixed(1) : "0.0",
+//     },
+//     secondServeWinPct: {
+//       A: secondServeMakes.A ? ((secondServeWins.A / secondServeMakes.A) * 100).toFixed(1) : "0.0",
+//       B: secondServeMakes.B ? ((secondServeWins.B / secondServeMakes.B) * 100).toFixed(1) : "0.0",
+//     },
+//   };
+// }
+function calculateStats() {
   let totalPointsA = 0,
     totalPointsB = 0;
   let errorsA = 0,
@@ -286,10 +592,20 @@ export default function App() {
           indiv[servingPlayerName].firstServeMakes++;
         }
 
-        // Track return stats for receiver(s)
-        const receiverNames = mode === "singles" 
-          ? [receiverTeam === "A" ? playerA : playerB]
-          : receiverTeam === "A" ? [playerA1, playerA2] : [playerB1, playerB2];
+        // Track return stats for receiver(s) - only if serve was in
+        const returnerFromPoint = (point as any).returner as string | undefined;
+        let receiverNames: string[];
+        
+        if (mode === "doubles" && returnerFromPoint) {
+          // In doubles, use the specific returner if recorded
+          receiverNames = [returnerFromPoint];
+        } else if (mode === "singles") {
+          // In singles, use the receiving player
+          receiverNames = [receiverTeam === "A" ? playerA : playerB];
+        } else {
+          // Fallback: distribute to both players on receiving team (shouldn't happen if returner is always set)
+          receiverNames = receiverTeam === "A" ? [playerA1, playerA2] : [playerB1, playerB2];
+        }
         
         receiverNames.forEach((receiverName) => {
           indiv[receiverName].firstReturnOpportunities++;
@@ -321,10 +637,9 @@ export default function App() {
         }
 
         if (isDoubleFault) {
-          // double fault: second serve was missed — DO NOT increment secondServeMakes
-          // (point is awarded to receiver; we don't increment secondServeMakes or secondServeWins)
-          // note: we don't auto-increment indiv[servingPlayerName].errors here to avoid double-counting
-          // if an actor was already set; actor-based error handling remains in place above.
+          // double fault: second serve was missed — DO NOT track return stats
+          // (returner never got a chance to return)
+          return;
         } else {
           // second serve was in
           secondServeMakes[serverTeam]++;
@@ -332,10 +647,20 @@ export default function App() {
             indiv[servingPlayerName].secondServeMakes++;
           }
 
-          // Track return stats for receiver(s) on second serve
-          const receiverNames = mode === "singles" 
-            ? [receiverTeam === "A" ? playerA : playerB]
-            : receiverTeam === "A" ? [playerA1, playerA2] : [playerB1, playerB2];
+          // Track return stats for receiver(s) on second serve - only if serve was in (not DF)
+          const returnerFromPoint = (point as any).returner as string | undefined;
+          let receiverNames: string[];
+          
+          if (mode === "doubles" && returnerFromPoint) {
+            // In doubles, use the specific returner if recorded
+            receiverNames = [returnerFromPoint];
+          } else if (mode === "singles") {
+            // In singles, use the receiving player
+            receiverNames = [receiverTeam === "A" ? playerA : playerB];
+          } else {
+            // Fallback: distribute to both players on receiving team
+            receiverNames = receiverTeam === "A" ? [playerA1, playerA2] : [playerB1, playerB2];
+          }
           
           receiverNames.forEach((receiverName) => {
             indiv[receiverName].secondReturnOpportunities++;
@@ -437,7 +762,7 @@ export default function App() {
     },
   };
 }
-//   function calculateStats() {
+// function calculateStats() {
 //   let totalPointsA = 0,
 //     totalPointsB = 0;
 //   let errorsA = 0,
@@ -464,6 +789,14 @@ export default function App() {
 //       secondServeAttempts: number;
 //       secondServeMakes: number;
 //       shots: Record<string, { points: number; errors: number }>;
+//       firstReturnIn: number;
+//       firstReturnOut: number;
+//       firstReturnPointsWon: number;
+//       firstReturnOpportunities: number;
+//       secondReturnIn: number;
+//       secondReturnOut: number;
+//       secondReturnPointsWon: number;
+//       secondReturnOpportunities: number;
 //     }
 //   > = {};
 
@@ -478,6 +811,14 @@ export default function App() {
 //       secondServeAttempts: 0,
 //       secondServeMakes: 0,
 //       shots: {},
+//       firstReturnIn: 0,
+//       firstReturnOut: 0,
+//       firstReturnPointsWon: 0,
+//       firstReturnOpportunities: 0,
+//       secondReturnIn: 0,
+//       secondReturnOut: 0,
+//       secondReturnPointsWon: 0,
+//       secondReturnOpportunities: 0,
 //     };
 //   });
 
@@ -528,6 +869,8 @@ export default function App() {
 
 //       // Serve logic
 //       const serverTeam = game.server; // 'A' | 'B'
+//       const receiverTeam = serverTeam === "A" ? "B" : "A";
+      
 //       // If serverPlayer explicitly set (doubles) use it; otherwise, in singles attribute to that player
 //       const servingPlayerName =
 //         (game as any).serverPlayer ??
@@ -535,6 +878,7 @@ export default function App() {
 
 //       const isFirstServeGood = !game.serviceInfo[idx]; // true => 1st in, false => 1st missed -> 2nd serve
 //       const isDoubleFault = /DF/i.test(point.notation); // double fault hit on this point?
+//       const isServiceAce = /SrA/i.test(point.notation); // service ace
 
 //       // --- Team-level serve attempts ---
 //       firstServeAttempts[serverTeam]++;
@@ -551,6 +895,38 @@ export default function App() {
 //         if (servingPlayerName) {
 //           indiv[servingPlayerName].firstServeMakes++;
 //         }
+
+//         // Track return stats for receiver(s)
+//         const returnerFromPoint = (point as any).returner as string | undefined;
+//         let receiverNames: string[];
+        
+//         if (mode === "doubles" && returnerFromPoint) {
+//           // In doubles, use the specific returner if recorded
+//           receiverNames = [returnerFromPoint];
+//         } else if (mode === "singles") {
+//           // In singles, use the receiving player
+//           receiverNames = [receiverTeam === "A" ? playerA : playerB];
+//         } else {
+//           // Fallback: distribute to both players on receiving team (shouldn't happen if returner is always set)
+//           receiverNames = receiverTeam === "A" ? [playerA1, playerA2] : [playerB1, playerB2];
+//         }
+        
+//         receiverNames.forEach((receiverName) => {
+//           indiv[receiverName].firstReturnOpportunities++;
+          
+//           if (isServiceAce) {
+//             // Return was out (couldn't return the ace)
+//             indiv[receiverName].firstReturnOut++;
+//           } else {
+//             // Return was in
+//             indiv[receiverName].firstReturnIn++;
+            
+//             // Check if receiver won the point
+//             if (point.player === receiverTeam) {
+//               indiv[receiverName].firstReturnPointsWon++;
+//             }
+//           }
+//         });
 
 //         if (point.player === serverTeam) {
 //           // server's side won the point on 1st serve
@@ -575,6 +951,38 @@ export default function App() {
 //           if (servingPlayerName) {
 //             indiv[servingPlayerName].secondServeMakes++;
 //           }
+
+//           // Track return stats for receiver(s) on second serve
+//           const returnerFromPoint = (point as any).returner as string | undefined;
+//           let receiverNames: string[];
+          
+//           if (mode === "doubles" && returnerFromPoint) {
+//             // In doubles, use the specific returner if recorded
+//             receiverNames = [returnerFromPoint];
+//           } else if (mode === "singles") {
+//             // In singles, use the receiving player
+//             receiverNames = [receiverTeam === "A" ? playerA : playerB];
+//           } else {
+//             // Fallback: distribute to both players on receiving team
+//             receiverNames = receiverTeam === "A" ? [playerA1, playerA2] : [playerB1, playerB2];
+//           }
+          
+//           receiverNames.forEach((receiverName) => {
+//             indiv[receiverName].secondReturnOpportunities++;
+            
+//             if (isServiceAce) {
+//               // Return was out (couldn't return the ace)
+//               indiv[receiverName].secondReturnOut++;
+//             } else {
+//               // Return was in
+//               indiv[receiverName].secondReturnIn++;
+              
+//               // Check if receiver won the point
+//               if (point.player === receiverTeam) {
+//                 indiv[receiverName].secondReturnPointsWon++;
+//               }
+//             }
+//           });
 
 //           if (point.player === serverTeam) {
 //             // server's side won the point on 2nd serve
@@ -605,7 +1013,7 @@ export default function App() {
 //       firstServeContributionPct: data.firstServeAttempts > 0 ? ((data.firstServePoints / data.firstServeAttempts) * 100).toFixed(1) + "%" : "0.0%",
 //       secondServePoints: data.secondServePoints,
 //       secondServeContributionPct: data.secondServeAttempts > 0 ? ((data.secondServePoints / data.secondServeAttempts) * 100).toFixed(1) + "%" : "0.0%",
-//       // NEW: per-player serve-in rates + raw attempts/makes
+//       // per-player serve-in rates + raw attempts/makes
 //       firstServeAttempts: data.firstServeAttempts,
 //       firstServeMakes: data.firstServeMakes,
 //       firstServeInPct: data.firstServeAttempts > 0 ? ((data.firstServeMakes / data.firstServeAttempts) * 100).toFixed(1) + "%" : "0.0%",
@@ -613,6 +1021,19 @@ export default function App() {
 //       secondServeMakes: data.secondServeMakes,
 //       secondServeInPct: data.secondServeAttempts > 0 ? ((data.secondServeMakes / data.secondServeAttempts) * 100).toFixed(1) + "%" : "0.0%",
 //       shots: data.shots,
+//       // Return stats
+//       firstReturnIn: data.firstReturnIn,
+//       firstReturnOut: data.firstReturnOut,
+//       firstReturnOpportunities: data.firstReturnOpportunities,
+//       firstReturnInPct: data.firstReturnOpportunities > 0 ? ((data.firstReturnIn / data.firstReturnOpportunities) * 100).toFixed(1) + "%" : "0.0%",
+//       firstReturnPointsWon: data.firstReturnPointsWon,
+//       firstReturnWinPct: data.firstReturnOpportunities > 0 ? ((data.firstReturnPointsWon / data.firstReturnOpportunities) * 100).toFixed(1) + "%" : "0.0%",
+//       secondReturnIn: data.secondReturnIn,
+//       secondReturnOut: data.secondReturnOut,
+//       secondReturnOpportunities: data.secondReturnOpportunities,
+//       secondReturnInPct: data.secondReturnOpportunities > 0 ? ((data.secondReturnIn / data.secondReturnOpportunities) * 100).toFixed(1) + "%" : "0.0%",
+//       secondReturnPointsWon: data.secondReturnPointsWon,
+//       secondReturnWinPct: data.secondReturnOpportunities > 0 ? ((data.secondReturnPointsWon / data.secondReturnOpportunities) * 100).toFixed(1) + "%" : "0.0%",
 //     };
 //   }
 
@@ -646,381 +1067,6 @@ export default function App() {
 //     },
 //   };
 // }
-//   function calculateStats() {
-//   let totalPointsA = 0,
-//     totalPointsB = 0;
-//   let errorsA = 0,
-//     errorsB = 0;
-
-//   // Team serve aggregates
-//   let firstServeAttempts = { A: 0, B: 0 };
-//   let firstServeMakes = { A: 0, B: 0 };
-//   let firstServeWins = { A: 0, B: 0 };
-//   let secondServeAttempts = { A: 0, B: 0 };
-//   let secondServeMakes = { A: 0, B: 0 };
-//   let secondServeWins = { A: 0, B: 0 };
-
-//   // Per-player tracking (includes serve attempts/makes)
-//   const indiv: Record<
-//     string,
-//     {
-//       pointsMade: number;
-//       errors: number;
-//       firstServePoints: number;
-//       secondServePoints: number;
-//       firstServeAttempts: number;
-//       firstServeMakes: number;
-//       secondServeAttempts: number;
-//       secondServeMakes: number;
-//       shots: Record<string, { points: number; errors: number }>;
-//     }
-//   > = {};
-
-//   allPlayerNames().forEach((n) => {
-//     indiv[n] = {
-//       pointsMade: 0,
-//       errors: 0,
-//       firstServePoints: 0,
-//       secondServePoints: 0,
-//       firstServeAttempts: 0,
-//       firstServeMakes: 0,
-//       secondServeAttempts: 0,
-//       secondServeMakes: 0,
-//       shots: {},
-//     };
-//   });
-
-//   games.forEach((game) => {
-//     game.points.forEach((point, idx) => {
-//       if (!point) return;
-
-//       // team totals
-//       if (point.player === "A") totalPointsA++;
-//       else totalPointsB++;
-
-//       // team errors (loser gets the 'error' count)
-//       if (/O|N/.test(point.notation)) {
-//         if (point.player === "A") errorsB++;
-//         else errorsA++;
-//       }
-
-//       // actor-based counts (points/errors)
-//       const actor = (point as any).actor as string | undefined;
-//       if (actor && actorToTeam(actor) === point.player) {
-//         indiv[actor].pointsMade++;
-        
-//         // Track shot type for points
-//         const shotType = point.notation.match(/[A-Z][a-z]*/g)?.[0] || "Unknown";
-//         if (!indiv[actor].shots[shotType]) {
-//           indiv[actor].shots[shotType] = { points: 0, errors: 0 };
-//         }
-//         indiv[actor].shots[shotType].points++;
-//       }
-//       if (actor && /O|N/.test(point.notation)) {
-//         indiv[actor].errors++;
-        
-//         // Track shot type for errors
-//         const shotType = point.notation.match(/[A-Z][a-z]*/g)?.[0] || "Unknown";
-//         if (!indiv[actor].shots[shotType]) {
-//           indiv[actor].shots[shotType] = { points: 0, errors: 0 };
-//         }
-//         indiv[actor].shots[shotType].errors++;
-//       }
-
-//       // Serve logic
-//       const serverTeam = game.server;
-//       const servingPlayerName =
-//         (game as any).serverPlayer ??
-//         (mode === "singles" ? (serverTeam === "A" ? playerA : playerB) : undefined);
-
-//       const isFirstServeGood = !game.serviceInfo[idx];
-//       const isDoubleFault = /DF/i.test(point.notation);
-
-//       firstServeAttempts[serverTeam]++;
-
-//       if (servingPlayerName) {
-//         indiv[servingPlayerName].firstServeAttempts++;
-//       }
-
-//       if (isFirstServeGood) {
-//         firstServeMakes[serverTeam]++;
-
-//         if (servingPlayerName) {
-//           indiv[servingPlayerName].firstServeMakes++;
-//         }
-
-//         if (point.player === serverTeam) {
-//           firstServeWins[serverTeam]++;
-//           if (servingPlayerName) indiv[servingPlayerName].firstServePoints++;
-//         }
-//       } else {
-//         secondServeAttempts[serverTeam]++;
-//         if (servingPlayerName) {
-//           indiv[servingPlayerName].secondServeAttempts++;
-//         }
-
-//         if (isDoubleFault) {
-//           // double fault: second serve was missed
-//         } else {
-//           secondServeMakes[serverTeam]++;
-//           if (servingPlayerName) {
-//             indiv[servingPlayerName].secondServeMakes++;
-//           }
-
-//           if (point.player === serverTeam) {
-//             secondServeWins[serverTeam]++;
-//             if (servingPlayerName) indiv[servingPlayerName].secondServePoints++;
-//           }
-//         }
-//       }
-//     });
-//   });
-
-//   // build per-player summary (including per-player serve-in %)
-//   const teamTotals = { A: totalPointsA, B: totalPointsB };
-//   const indivDetailed: Record<string, any> = {};
-//   for (const name of Object.keys(indiv)) {
-//     const data = indiv[name];
-//     const team = actorToTeam(name);
-//     const teamFirstMakes = team ? firstServeMakes[team] : 0;
-//     const teamSecondMakes = team ? secondServeMakes[team] : 0;
-//     const teamPoints = team ? teamTotals[team] : 0;
-
-//     indivDetailed[name] = {
-//       pointsMade: data.pointsMade,
-//       errors: data.errors,
-//       pointsShareOfTeamPct: teamPoints > 0 ? ((data.pointsMade / teamPoints) * 100).toFixed(1) + "%" : "0.0%",
-//       firstServePoints: data.firstServePoints,
-//       firstServeContributionPct: data.firstServeAttempts > 0 ? ((data.firstServePoints / data.firstServeAttempts) * 100).toFixed(1) + "%" : "0.0%",
-//       secondServePoints: data.secondServePoints,
-//       secondServeContributionPct: data.secondServeAttempts > 0 ? ((data.secondServePoints / data.secondServeAttempts) * 100).toFixed(1) + "%" : "0.0%",
-//       firstServeAttempts: data.firstServeAttempts,
-//       firstServeMakes: data.firstServeMakes,
-//       firstServeInPct: data.firstServeAttempts > 0 ? ((data.firstServeMakes / data.firstServeAttempts) * 100).toFixed(1) + "%" : "0.0%",
-//       secondServeAttempts: data.secondServeAttempts,
-//       secondServeMakes: data.secondServeMakes,
-//       secondServeInPct: data.secondServeAttempts > 0 ? ((data.secondServeMakes / data.secondServeAttempts) * 100).toFixed(1) + "%" : "0.0%",
-//       shots: data.shots,
-//     };
-//   }
-
-//   return {
-//     totalPointsA,
-//     totalPointsB,
-//     errorsA,
-//     errorsB,
-//     firstServeAttempts,
-//     firstServeMakes,
-//     firstServeWins,
-//     secondServeAttempts,
-//     secondServeMakes,
-//     secondServeWins,
-//     indivDetailed,
-//     firstServeInPct: {
-//       A: firstServeAttempts.A ? ((firstServeMakes.A / firstServeAttempts.A) * 100).toFixed(1) : "0.0",
-//       B: firstServeAttempts.B ? ((firstServeMakes.B / firstServeAttempts.B) * 100).toFixed(1) : "0.0",
-//     },
-//     firstServeWinPct: {
-//       A: firstServeMakes.A ? ((firstServeWins.A / firstServeMakes.A) * 100).toFixed(1) : "0.0",
-//       B: firstServeMakes.B ? ((firstServeWins.B / firstServeMakes.B) * 100).toFixed(1) : "0.0",
-//     },
-//     secondServeInPct: {
-//       A: secondServeAttempts.A ? ((secondServeMakes.A / secondServeAttempts.A) * 100).toFixed(1) : "0.0",
-//       B: secondServeAttempts.B ? ((secondServeMakes.B / secondServeAttempts.B) * 100).toFixed(1) : "0.0",
-//     },
-//     secondServeWinPct: {
-//       A: secondServeMakes.A ? ((secondServeWins.A / secondServeMakes.A) * 100).toFixed(1) : "0.0",
-//       B: secondServeMakes.B ? ((secondServeWins.B / secondServeMakes.B) * 100).toFixed(1) : "0.0",
-//     },
-//   };
-// }
-// function calculateStats() {
-//   let totalPointsA = 0,
-//     totalPointsB = 0;
-//   let errorsA = 0,
-//     errorsB = 0;
-
-//   // Team serve aggregates
-//   let firstServeAttempts = { A: 0, B: 0 };
-//   let firstServeMakes = { A: 0, B: 0 };
-//   let firstServeWins = { A: 0, B: 0 };
-//   let secondServeAttempts = { A: 0, B: 0 };
-//   let secondServeMakes = { A: 0, B: 0 };
-//   let secondServeWins = { A: 0, B: 0 };
-
-//   // Per-player tracking (includes serve attempts/makes)
-//   const indiv: Record<
-//     string,
-//     {
-//       pointsMade: number;
-//       errors: number;
-//       firstServePoints: number; // points won on 1st serve when server's team won
-//       secondServePoints: number; // points won on 2nd serve when server's team won
-//       firstServeAttempts: number;
-//       firstServeMakes: number;
-//       secondServeAttempts: number;
-//       secondServeMakes: number;
-//     }
-//   > = {};
-
-//   allPlayerNames().forEach((n) => {
-//     indiv[n] = {
-//       pointsMade: 0,
-//       errors: 0,
-//       firstServePoints: 0,
-//       secondServePoints: 0,
-//       firstServeAttempts: 0,
-//       firstServeMakes: 0,
-//       secondServeAttempts: 0,
-//       secondServeMakes: 0,
-//     };
-//   });
-
-//   games.forEach((game) => {
-//     game.points.forEach((point, idx) => {
-//       if (!point) return;
-
-//       // team totals
-//       if (point.player === "A") totalPointsA++;
-//       else totalPointsB++;
-
-//       // team errors (loser gets the 'error' count)
-//       if (/O|N/.test(point.notation)) {
-//         if (point.player === "A") errorsB++;
-//         else errorsA++;
-//       }
-
-//       // actor-based counts (points/errors)
-//       const actor = (point as any).actor as string | undefined;
-//       if (actor && actorToTeam(actor) === point.player) {
-//         indiv[actor].pointsMade++;
-//       }
-//       if (actor && /O|N/.test(point.notation)) {
-//         indiv[actor].errors++;
-//       }
-
-//       // Serve logic
-//       const serverTeam = game.server; // 'A' | 'B'
-//       // If serverPlayer explicitly set (doubles) use it; otherwise, in singles attribute to that player
-//       const servingPlayerName =
-//         (game as any).serverPlayer ??
-//         (mode === "singles" ? (serverTeam === "A" ? playerA : playerB) : undefined);
-
-//       const isFirstServeGood = !game.serviceInfo[idx]; // true => 1st in, false => 1st missed -> 2nd serve
-//       const isDoubleFault = /DF/i.test(point.notation); // double fault hit on this point?
-
-//       // --- Team-level serve attempts ---
-//       firstServeAttempts[serverTeam]++;
-
-//       // --- Individual-level: first serve attempt always increments for the server (if known) ---
-//       if (servingPlayerName) {
-//         indiv[servingPlayerName].firstServeAttempts++;
-//       }
-
-//       if (isFirstServeGood) {
-//         // first serve was in
-//         firstServeMakes[serverTeam]++;
-
-//         if (servingPlayerName) {
-//           indiv[servingPlayerName].firstServeMakes++;
-//         }
-
-//         if (point.player === serverTeam) {
-//           // server's side won the point on 1st serve
-//           firstServeWins[serverTeam]++;
-//           if (servingPlayerName) indiv[servingPlayerName].firstServePoints++;
-//         }
-//       } else {
-//         // first serve missed -> second serve happened (or DF)
-//         secondServeAttempts[serverTeam]++;
-//         if (servingPlayerName) {
-//           indiv[servingPlayerName].secondServeAttempts++;
-//         }
-
-//         if (isDoubleFault) {
-//           // double fault: second serve was missed — DO NOT increment secondServeMakes
-//           // (point is awarded to receiver; we don't increment secondServeMakes or secondServeWins)
-//           // note: we don't auto-increment indiv[servingPlayerName].errors here to avoid double-counting
-//           // if an actor was already set; actor-based error handling remains in place above.
-//         } else {
-//           // second serve was in
-//           secondServeMakes[serverTeam]++;
-//           if (servingPlayerName) {
-//             indiv[servingPlayerName].secondServeMakes++;
-//           }
-
-//           if (point.player === serverTeam) {
-//             // server's side won the point on 2nd serve
-//             secondServeWins[serverTeam]++;
-//             if (servingPlayerName) indiv[servingPlayerName].secondServePoints++;
-//           }
-//         }
-//       }
-//     });
-//   });
-
-//   // build per-player summary (including per-player serve-in %)
-//   const teamTotals = { A: totalPointsA, B: totalPointsB };
-//   const indivDetailed: Record<string, any> = {};
-//   for (const name of Object.keys(indiv)) {
-//     const data = indiv[name];
-//     const team = actorToTeam(name);
-//     const teamFirstMakes = team ? firstServeMakes[team] : 0;
-//     const teamSecondMakes = team ? secondServeMakes[team] : 0;
-//     const teamPoints = team ? teamTotals[team] : 0;
-
-//     indivDetailed[name] = {
-//       pointsMade: data.pointsMade,
-//       errors: data.errors,
-//       pointsShareOfTeamPct: teamPoints > 0 ? ((data.pointsMade / teamPoints) * 100).toFixed(1) + "%" : "0.0%",
-//       // server-point contributions (as before)
-//       firstServePoints: data.firstServePoints,
-//       firstServeContributionPct: data.firstServeAttempts > 0 ? ((data.firstServePoints / data.firstServeAttempts) * 100).toFixed(1) + "%" : "0.0%",
-//       secondServePoints: data.secondServePoints,
-//       secondServeContributionPct: data.secondServeAttempts > 0 ? ((data.secondServePoints / data.secondServeAttempts) * 100).toFixed(1) + "%" : "0.0%",
-//       // NEW: per-player serve-in rates + raw attempts/makes
-//       firstServeAttempts: data.firstServeAttempts,
-//       firstServeMakes: data.firstServeMakes,
-//       firstServeInPct: data.firstServeAttempts > 0 ? ((data.firstServeMakes / data.firstServeAttempts) * 100).toFixed(1) + "%" : "0.0%",
-//       secondServeAttempts: data.secondServeAttempts,
-//       secondServeMakes: data.secondServeMakes,
-//       secondServeInPct: data.secondServeAttempts > 0 ? ((data.secondServeMakes / data.secondServeAttempts) * 100).toFixed(1) + "%" : "0.0%",
-//     };
-//   }
-
-//   return {
-//     totalPointsA,
-//     totalPointsB,
-//     errorsA,
-//     errorsB,
-//     firstServeAttempts,
-//     firstServeMakes,
-//     firstServeWins,
-//     secondServeAttempts,
-//     secondServeMakes,
-//     secondServeWins,
-//     indivDetailed,
-//     firstServeInPct: {
-//       A: firstServeAttempts.A ? ((firstServeMakes.A / firstServeAttempts.A) * 100).toFixed(1) : "0.0",
-//       B: firstServeAttempts.B ? ((firstServeMakes.B / firstServeAttempts.B) * 100).toFixed(1) : "0.0",
-//     },
-//     firstServeWinPct: {
-//       A: firstServeMakes.A ? ((firstServeWins.A / firstServeMakes.A) * 100).toFixed(1) : "0.0",
-//       B: firstServeMakes.B ? ((firstServeWins.B / firstServeMakes.B) * 100).toFixed(1) : "0.0",
-//     },
-//     secondServeInPct: {
-//       A: secondServeAttempts.A ? ((secondServeMakes.A / secondServeAttempts.A) * 100).toFixed(1) : "0.0",
-//       B: secondServeAttempts.B ? ((secondServeMakes.B / secondServeAttempts.B) * 100).toFixed(1) : "0.0",
-//     },
-//     secondServeWinPct: {
-//       A: secondServeMakes.A ? ((secondServeWins.A / secondServeMakes.A) * 100).toFixed(1) : "0.0",
-//       B: secondServeMakes.B ? ((secondServeWins.B / secondServeMakes.B) * 100).toFixed(1) : "0.0",
-//     },
-//   };
-// }
-
-
-
   const stats = calculateStats();
 
   function shortName(n?: string) {
@@ -1444,6 +1490,44 @@ function exportPDF() {
                   </button>
                 </div>
               </div>
+
+{/* Returner selection: only in doubles mode when opponent is serving */}
+{mode === "doubles" && modal && (
+  (() => {
+    const serverTeam = games[modal.gameIndex]?.server;
+    // Show returner selection for BOTH teams in doubles
+    const receiverTeamA = serverTeam === "B" ? "A" : null;
+    const receiverTeamB = serverTeam === "A" ? "B" : null;
+    
+    let receiverNames: string[] = [];
+    if (receiverTeamA) {
+      receiverNames = [playerA1, playerA2];
+    } else if (receiverTeamB) {
+      receiverNames = [playerB1, playerB2];
+    }
+    
+    if (receiverNames.length > 0) {
+      return (
+        <div style={{ gridColumn: "1 / -1", border: "1px solid #ddd", padding: 8, borderRadius: 4 }}>
+          <h4 style={{ margin: "0 0 8px 0", fontSize: 14, color: "#666" }}>Who Returned?</h4>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {receiverNames.map((p) => (
+              <button
+                key={p}
+                className={"btn"}
+                style={{ background: selected.returner === p ? "#007bff" : "#fff", color: selected.returner === p ? "#fff" : "#007bff", padding: "6px 10px" }}
+                onClick={() => setSelected((s) => ({ ...s, returner: p }))}
+              >
+                {p}
+              </button>
+            ))}
+          </div>
+        </div>
+      );
+    }
+    return null;
+  })()
+)}
             </div>
 
             <div style={{ display: "flex", gap: 8 }}>
