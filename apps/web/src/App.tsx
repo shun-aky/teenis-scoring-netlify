@@ -4,13 +4,21 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
 // type ShotSel = { hand?: string; shot?: string; result?: string; actor?: string };
-type ShotSel = { hand?: string; shot?: string; result?: string; actor?: string; returner?: string };
+// type ShotSel = { hand?: string; shot?: string; result?: string; actor?: string; returner?: string };
+type ShotSel = { hand?: string; shot?: string; result?: string; actor?: string; returner?: string; server?: string };
+// interface ModalState {
+//   open: boolean;
+//   gameIndex: number;
+//   pointIndex: number;
+//   player: Core.Player;
+// }
 
 interface ModalState {
   open: boolean;
   gameIndex: number;
   pointIndex: number;
   player: Core.Player;
+  isTieBreak?: boolean;  // ADD THIS LINE
 }
 
 export default function App() {
@@ -29,6 +37,7 @@ export default function App() {
   const [games, setGames] = useState<Core.Game[]>([Core.createGame()]);
   const [modal, setModal] = useState<ModalState | null>(null);
   const [selected, setSelected] = useState<ShotSel>({});
+const [tieBreaks, setTieBreaks] = useState<Array<{ points: any[], scoreA: number, scoreB: number, totalBoxes: number }>>([]);
 
   const initials = useMemo(
     () => ({
@@ -42,35 +51,171 @@ export default function App() {
     setGames((gs) => [...gs, { ...Core.createGame(), serverPlayer: undefined }]);
   }
 
-  function clearSheet() {
-    setGames([]);
-  }
+function addTieBreak() {
+  setTieBreaks((tbs) => [...tbs, { points: Array(12).fill(null), scoreA: 0, scoreB: 0, totalBoxes: 12 }]);
+}
+
+function addTieBreakBoxes(tieBreakIndex: number) {
+  setTieBreaks((tbs) => {
+    const copy = tbs.slice();
+    const tb = { ...copy[tieBreakIndex] };
+    copy[tieBreakIndex] = tb;
+    tb.totalBoxes += 2;
+    tb.points = [...tb.points, null, null];
+    return copy;
+  });
+}
+
+function removeTieBreakBoxes(tieBreakIndex: number) {
+  setTieBreaks((tbs) => {
+    const copy = tbs.slice();
+    const tb = { ...copy[tieBreakIndex] };
+    copy[tieBreakIndex] = tb;
+    if (tb.totalBoxes > 12) {
+      tb.totalBoxes -= 2;
+      tb.points = tb.points.slice(0, tb.totalBoxes);
+    }
+    return copy;
+  });
+}
+
+function clearSheet() {
+  setGames([]);
+  setTieBreaks([]);  // ADD THIS LINE
+}
 
   function openPointInput(gameIndex: number, pointIndex: number, player: Core.Player) {
     setSelected({});
     setModal({ open: true, gameIndex, pointIndex, player });
   }
+
+  function openTieBreakPointInput(tieBreakIndex: number, pointIndex: number, player: Core.Player) {
+  setSelected({});
+  setModal({ open: true, gameIndex: tieBreakIndex, pointIndex, player, isTieBreak: true });
+}
+
   function cancelInput() {
     setModal(null);
   }
-  function confirmInput() {
+//   function confirmInput() {
+//   if (!modal) return;
+//   const notation = `${selected.hand ?? ""}${selected.shot ?? ""}${selected.result ?? ""}`;
+//   if (!notation) {
+//     setModal(null);
+//     return;
+//   }
+//   setGames((gs) => {
+//     const copy = gs.slice();
+//     const g = { ...copy[modal.gameIndex] };
+//     copy[modal.gameIndex] = g;
+//     Core.setPoint(g, modal.pointIndex, modal.player, notation);
+//     const pt = (g.points[modal.pointIndex] as any) || {};
+//     pt.actor = selected.actor;
+//     pt.returner = selected.returner; // Store returner info
+//     g.points[modal.pointIndex] = pt;
+//     return copy;
+//   });
+//   setModal(null);
+// }
+// function confirmInput() {
+//   if (!modal) return;
+//   const notation = `${selected.hand ?? ""}${selected.shot ?? ""}${selected.result ?? ""}`;
+//   if (!notation) {
+//     setModal(null);
+//     return;
+//   }
+  
+//   if (modal.isTieBreak) {
+//     // Handle tie break point
+//     setTieBreaks((tbs) => {
+//       const copy = tbs.slice();
+//       const tb = { ...copy[modal.gameIndex] };
+//       copy[modal.gameIndex] = tb;
+      
+//       const pointData = {
+//         player: modal.player,
+//         notation: notation,
+//         actor: selected.actor,
+//         returner: selected.returner,
+//         server: selected.actor // In tie break, actor is the server
+//       };
+      
+//       tb.points[modal.pointIndex] = pointData;
+      
+//       // Update score
+//       if (modal.player === "A") {
+//         tb.scoreA = (tb.scoreA || 0) + 1;
+//       } else {
+//         tb.scoreB = (tb.scoreB || 0) + 1;
+//       }
+      
+//       return copy;
+//     });
+//   } else {
+//     // Handle regular game point
+//     setGames((gs) => {
+//       const copy = gs.slice();
+//       const g = { ...copy[modal.gameIndex] };
+//       copy[modal.gameIndex] = g;
+//       Core.setPoint(g, modal.pointIndex, modal.player, notation);
+//       const pt = (g.points[modal.pointIndex] as any) || {};
+//       pt.actor = selected.actor;
+//       pt.returner = selected.returner;
+//       g.points[modal.pointIndex] = pt;
+//       return copy;
+//     });
+//   }
+//   setModal(null);
+// }
+
+function confirmInput() {
   if (!modal) return;
   const notation = `${selected.hand ?? ""}${selected.shot ?? ""}${selected.result ?? ""}`;
   if (!notation) {
     setModal(null);
     return;
   }
-  setGames((gs) => {
-    const copy = gs.slice();
-    const g = { ...copy[modal.gameIndex] };
-    copy[modal.gameIndex] = g;
-    Core.setPoint(g, modal.pointIndex, modal.player, notation);
-    const pt = (g.points[modal.pointIndex] as any) || {};
-    pt.actor = selected.actor;
-    pt.returner = selected.returner; // Store returner info
-    g.points[modal.pointIndex] = pt;
-    return copy;
-  });
+  
+  if (modal.isTieBreak) {
+    // Handle tie break point
+    setTieBreaks((tbs) => {
+      const copy = tbs.slice();
+      const tb = { ...copy[modal.gameIndex] };
+      copy[modal.gameIndex] = tb;
+      
+      const pointData = {
+        player: modal.player,
+        notation: notation,
+        actor: selected.actor,
+        returner: selected.returner,
+        server: selected.server // Use separate server field
+      };
+      
+      tb.points[modal.pointIndex] = pointData;
+      
+      // Update score
+      if (modal.player === "A") {
+        tb.scoreA = (tb.scoreA || 0) + 1;
+      } else {
+        tb.scoreB = (tb.scoreB || 0) + 1;
+      }
+      
+      return copy;
+    });
+  } else {
+    // Handle regular game point
+    setGames((gs) => {
+      const copy = gs.slice();
+      const g = { ...copy[modal.gameIndex] };
+      copy[modal.gameIndex] = g;
+      Core.setPoint(g, modal.pointIndex, modal.player, notation);
+      const pt = (g.points[modal.pointIndex] as any) || {};
+      pt.actor = selected.actor;
+      pt.returner = selected.returner;
+      g.points[modal.pointIndex] = pt;
+      return copy;
+    });
+  }
   setModal(null);
 }
   // function confirmInput() {
@@ -689,6 +834,105 @@ function calculateStats() {
     });
   });
 
+  // Process tie breaks
+  tieBreaks.forEach((tb) => {
+    tb.points.forEach((point) => {
+      if (!point) return;
+
+      // team totals
+      if (point.player === "A") totalPointsA++;
+      else totalPointsB++;
+
+      // team errors
+      if (/O|N/.test(point.notation)) {
+        if (point.player === "A") errorsB++;
+        else errorsA++;
+      }
+
+      // actor-based counts
+      const actor = point.actor as string | undefined;
+      if (actor && actorToTeam(actor) === point.player) {
+        indiv[actor].pointsMade++;
+        
+        const notation = point.notation;
+        const hand = notation.match(/^[FB]/)?.[0] || "";
+        const shot = notation.replace(/^[FB]/, "").replace(/[AON]$/, "") || "Unknown";
+        const shotLabel = hand + shot;
+        
+        if (!indiv[actor].shots[shotLabel]) {
+          indiv[actor].shots[shotLabel] = { points: 0, errors: 0 };
+        }
+        indiv[actor].shots[shotLabel].points++;
+      }
+      if (actor && /O|N/.test(point.notation)) {
+        indiv[actor].errors++;
+        
+        const notation = point.notation;
+        const hand = notation.match(/^[FB]/)?.[0] || "";
+        const shot = notation.replace(/^[FB]/, "").replace(/[AON]$/, "") || "Unknown";
+        const shotLabel = hand + shot;
+        
+        if (!indiv[actor].shots[shotLabel]) {
+          indiv[actor].shots[shotLabel] = { points: 0, errors: 0 };
+        }
+        indiv[actor].shots[shotLabel].errors++;
+      }
+
+      // Serve logic for tie breaks
+      const servingPlayerName = point.server as string | undefined;
+      if (!servingPlayerName) return;
+      
+      const serverTeam = actorToTeam(servingPlayerName);
+      if (!serverTeam) return;
+      
+      const receiverTeam = serverTeam === "A" ? "B" : "A";
+      
+      // In tie breaks, we don't track service info (1st/2nd serve)
+      // For simplicity, treat all tie break serves as first serves
+      const isServiceAce = /SrA/i.test(point.notation);
+      const isDoubleFault = /DF/i.test(point.notation);
+      
+      firstServeAttempts[serverTeam]++;
+      indiv[servingPlayerName].firstServeAttempts++;
+      
+      if (!isDoubleFault) {
+        firstServeMakes[serverTeam]++;
+        indiv[servingPlayerName].firstServeMakes++;
+        
+        // Track return stats
+        const returnerFromPoint = point.returner as string | undefined;
+        let receiverNames: string[];
+        
+        if (mode === "doubles" && returnerFromPoint) {
+          receiverNames = [returnerFromPoint];
+        } else if (mode === "singles") {
+          receiverNames = [receiverTeam === "A" ? playerA : playerB];
+        } else {
+          receiverNames = receiverTeam === "A" ? [playerA1, playerA2] : [playerB1, playerB2];
+        }
+        
+        receiverNames.forEach((receiverName) => {
+          indiv[receiverName].firstReturnOpportunities++;
+          
+          if (isServiceAce) {
+            indiv[receiverName].firstReturnOut++;
+          } else {
+            indiv[receiverName].firstReturnIn++;
+            
+            if (point.player === receiverTeam) {
+              indiv[receiverName].firstReturnPointsWon++;
+            }
+          }
+        });
+
+        if (point.player === serverTeam) {
+          firstServeWins[serverTeam]++;
+          indiv[servingPlayerName].firstServePoints++;
+        }
+      }
+    });
+  });
+
   // build per-player summary (including per-player serve-in %)
   const teamTotals = { A: totalPointsA, B: totalPointsB };
   const indivDetailed: Record<string, any> = {};
@@ -1157,6 +1401,7 @@ function exportPDF() {
 
       <div className="controls">
         <button className="btn" onClick={addGame}>Add Game</button>
+        <button className="btn" onClick={addTieBreak}>Add Tie Break</button>
         <button className="btn secondary" onClick={clearSheet}>Clear Sheet</button>
         <button className="btn" onClick={exportPDF}>Export PDF</button>
       </div>
@@ -1234,6 +1479,64 @@ function exportPDF() {
             </div>
           </div>
         ))}
+
+        {/* Tie Break Grids */}
+{tieBreaks.map((tb, tbi) => (
+  <div className="game-row" key={`tb-${tbi}`} style={{ marginTop: 20, background: '#fffacd' }}>
+    <h3 style={{ gridColumn: '1 / -1', textAlign: 'center', margin: '8px 0' }}>Tie Break {tbi + 1}</h3>
+    <div className="points-container">
+      {/* Player A row */}
+      <div className="player-section">
+        <div className="server-marker">{initials.A}</div>
+        {Array.from({ length: tb.totalBoxes }).map((_, i) => {
+          const p = tb.points[i];
+          const filled = p && p.player === "A";
+          return (
+            <div key={`tba-${i}`} className={"point-box " + (filled ? "filled " : "")} onClick={() => openTieBreakPointInput(tbi, i, "A")}>
+              {filled ? (
+                <>
+                  <span className="actor" style={{ fontSize: '10px', display: 'block' }}>{p.server ? shortName(p.server) : ''}</span>
+                  <span className="notation">{p.notation}</span>
+                </>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Player B row */}
+      <div className="player-section">
+        <div className="server-marker">{initials.B}</div>
+        {Array.from({ length: tb.totalBoxes }).map((_, i) => {
+          const p = tb.points[i];
+          const filled = p && p.player === "B";
+          return (
+            <div key={`tbb-${i}`} className={"point-box " + (filled ? "filled " : "")} onClick={() => openTieBreakPointInput(tbi, i, "B")}>
+              {filled ? (
+                <>
+                  <span className="actor" style={{ fontSize: '10px', display: 'block' }}>{p.server ? shortName(p.server) : ''}</span>
+                  <span className="notation">{p.notation}</span>
+                </>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+
+    <div className="game-score-container">
+      <div className="score-inputs">
+        <input className="score-inp" type="number" min={0} max={99} value={tb.scoreA} readOnly />
+        <span className="hyphen">-</span>
+        <input className="score-inp" type="number" min={0} max={99} value={tb.scoreB} readOnly />
+      </div>
+      <div style={{ marginTop: 8 }}>
+        <button className="btn" style={{ background: "#28a745" }} onClick={() => addTieBreakBoxes(tbi)}>+</button>
+        {tb.totalBoxes > 12 && <button className="btn" style={{ background: "#dc3545" }} onClick={() => removeTieBreakBoxes(tbi)}>−</button>}
+      </div>
+    </div>
+  </div>
+))}
       </div>
 
       {/* Stats Panel */}
@@ -1471,6 +1774,25 @@ function exportPDF() {
                 </div>
               </div>
 
+{/* Server selection - only in tie breaks */}
+{modal?.isTieBreak && (
+  <div style={{ gridColumn: "1 / -1", border: "1px solid #ddd", padding: 8, borderRadius: 4, background: '#fffacd' }}>
+    <h4 style={{ margin: "0 0 8px 0", fontSize: 14, color: "#666" }}>Who Served? (Required for Tie Break)</h4>
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+      {allPlayerNames().map((p) => (
+        <button
+          key={p}
+          className={"btn"}
+          style={{ background: selected.server === p ? "#007bff" : "#fff", color: selected.server === p ? "#fff" : "#007bff", padding: "6px 10px" }}
+          onClick={() => setSelected((s) => ({ ...s, server: p }))}
+        >
+          {p}
+        </button>
+      ))}
+    </div>
+  </div>
+)}
+
               {/* Actor selection: always available (works for singles & doubles) */}
               <div style={{ gridColumn: "1 / -1", border: "1px solid #ddd", padding: 8, borderRadius: 4 }}>
                 <h4 style={{ margin: "0 0 8px 0", fontSize: 14, color: "#666" }}>Last Actor (who made the final action)</h4>
@@ -1492,7 +1814,7 @@ function exportPDF() {
               </div>
 
 {/* Returner selection: only in doubles mode when opponent is serving */}
-{mode === "doubles" && modal && (
+{/* {mode === "doubles" && modal && (
   (() => {
     const serverTeam = games[modal.gameIndex]?.server;
     // Show returner selection for BOTH teams in doubles
@@ -1527,6 +1849,61 @@ function exportPDF() {
     }
     return null;
   })()
+)} */}
+{/* Returner selection: in doubles mode */}
+{mode === "doubles" && modal && !modal.isTieBreak && (
+  (() => {
+    const serverTeam = games[modal.gameIndex]?.server;
+    const receiverTeamA = serverTeam === "B" ? "A" : null;
+    const receiverTeamB = serverTeam === "A" ? "B" : null;
+    
+    let receiverNames: string[] = [];
+    if (receiverTeamA) {
+      receiverNames = [playerA1, playerA2];
+    } else if (receiverTeamB) {
+      receiverNames = [playerB1, playerB2];
+    }
+    
+    if (receiverNames.length > 0) {
+      return (
+        <div style={{ gridColumn: "1 / -1", border: "1px solid #ddd", padding: 8, borderRadius: 4 }}>
+          <h4 style={{ margin: "0 0 8px 0", fontSize: 14, color: "#666" }}>Who Returned?</h4>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {receiverNames.map((p) => (
+              <button
+                key={p}
+                className={"btn"}
+                style={{ background: selected.returner === p ? "#007bff" : "#fff", color: selected.returner === p ? "#fff" : "#007bff", padding: "6px 10px" }}
+                onClick={() => setSelected((s) => ({ ...s, returner: p }))}
+              >
+                {p}
+              </button>
+            ))}
+          </div>
+        </div>
+      );
+    }
+    return null;
+  })()
+)}
+
+{/* Returner selection for tie breaks - all players available */}
+{mode === "doubles" && modal?.isTieBreak && (
+  <div style={{ gridColumn: "1 / -1", border: "1px solid #ddd", padding: 8, borderRadius: 4 }}>
+    <h4 style={{ margin: "0 0 8px 0", fontSize: 14, color: "#666" }}>Who Returned?</h4>
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+      {allPlayerNames().map((p) => (
+        <button
+          key={p}
+          className={"btn"}
+          style={{ background: selected.returner === p ? "#007bff" : "#fff", color: selected.returner === p ? "#fff" : "#007bff", padding: "6px 10px" }}
+          onClick={() => setSelected((s) => ({ ...s, returner: p }))}
+        >
+          {p}
+        </button>
+      ))}
+    </div>
+  </div>
 )}
             </div>
 
