@@ -1,11 +1,24 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import * as Core from "@tennis/core";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
 // type ShotSel = { hand?: string; shot?: string; result?: string; actor?: string };
 // type ShotSel = { hand?: string; shot?: string; result?: string; actor?: string; returner?: string };
-type ShotSel = { hand?: string; shot?: string; result?: string; actor?: string; returner?: string; server?: string };
+type ShotSel = { hand?: string; shot?: string; result?: string; actor?: string; returner?: string; server?: string; returnMiss?: boolean };
+
+const STORAGE_KEY = "tennis-scoring-state";
+
+type ReturnStats = {
+  firstReturnIn: number;
+  firstReturnOut: number;
+  firstReturnPointsWon: number;
+  firstReturnOpportunities: number;
+  secondReturnIn: number;
+  secondReturnOut: number;
+  secondReturnPointsWon: number;
+  secondReturnOpportunities: number;
+};
 // interface ModalState {
 //   open: boolean;
 //   gameIndex: number;
@@ -38,6 +51,39 @@ export default function App() {
   const [modal, setModal] = useState<ModalState | null>(null);
   const [selected, setSelected] = useState<ShotSel>({});
 const [tieBreaks, setTieBreaks] = useState<Array<{ points: any[], scoreA: number, scoreB: number, totalBoxes: number }>>([]);
+  const [storageReady, setStorageReady] = useState(false);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const data = JSON.parse(saved);
+        if (data.mode === "singles" || data.mode === "doubles") setMode(data.mode);
+        if (typeof data.playerA === "string") setPlayerA(data.playerA);
+        if (typeof data.playerB === "string") setPlayerB(data.playerB);
+        if (typeof data.playerA1 === "string") setPlayerA1(data.playerA1);
+        if (typeof data.playerA2 === "string") setPlayerA2(data.playerA2);
+        if (typeof data.playerB1 === "string") setPlayerB1(data.playerB1);
+        if (typeof data.playerB2 === "string") setPlayerB2(data.playerB2);
+        if (Array.isArray(data.games) && data.games.length > 0) setGames(data.games);
+        if (Array.isArray(data.tieBreaks)) setTieBreaks(data.tieBreaks);
+      }
+    } catch {
+      // ignore corrupt saved state
+    } finally {
+      setStorageReady(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!storageReady) return;
+    const state = { mode, playerA, playerB, playerA1, playerA2, playerB1, playerB2, games, tieBreaks };
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    } catch {
+      // ignore quota errors
+    }
+  }, [storageReady, mode, playerA, playerB, playerA1, playerA2, playerB1, playerB2, games, tieBreaks]);
 
   const initials = useMemo(
     () => ({
@@ -80,19 +126,41 @@ function removeTieBreakBoxes(tieBreakIndex: number) {
 }
 
 function clearSheet() {
-  setGames([]);
-  setTieBreaks([]);  // ADD THIS LINE
+  setGames([Core.createGame()]);
+  setTieBreaks([]);
 }
 
+  function parseNotation(notation: string): Pick<ShotSel, "hand" | "shot" | "result"> {
+    const hand = notation.match(/^[FB]/)?.[0];
+    const rest = notation.replace(/^[FB]/, "");
+    const result = rest.match(/[AON]$/)?.[0] as ShotSel["result"];
+    const shot = rest.replace(/[AON]$/, "") || undefined;
+    return { hand, shot, result };
+  }
+
+  function loadPointIntoSelection(point: {
+    notation?: string;
+    actor?: string;
+    returner?: string;
+    server?: string;
+    returnMiss?: boolean;
+  }): ShotSel {
+    if (!point.notation) return { actor: point.actor, returner: point.returner, server: point.server, returnMiss: point.returnMiss };
+    const { hand, shot, result } = parseNotation(point.notation);
+    return { hand, shot, result, actor: point.actor, returner: point.returner, server: point.server, returnMiss: point.returnMiss };
+  }
+
   function openPointInput(gameIndex: number, pointIndex: number, player: Core.Player) {
-    setSelected({});
+    const existing = games[gameIndex]?.points[pointIndex] as ShotSel & { notation?: string } | null;
+    setSelected(existing ? loadPointIntoSelection(existing as any) : {});
     setModal({ open: true, gameIndex, pointIndex, player });
   }
 
   function openTieBreakPointInput(tieBreakIndex: number, pointIndex: number, player: Core.Player) {
-  setSelected({});
-  setModal({ open: true, gameIndex: tieBreakIndex, pointIndex, player, isTieBreak: true });
-}
+    const existing = tieBreaks[tieBreakIndex]?.points[pointIndex] as ShotSel & { notation?: string } | null;
+    setSelected(existing ? loadPointIntoSelection(existing as any) : {});
+    setModal({ open: true, gameIndex: tieBreakIndex, pointIndex, player, isTieBreak: true });
+  }
 
   function cancelInput() {
     setModal(null);
@@ -188,6 +256,7 @@ function confirmInput() {
         notation: notation,
         actor: selected.actor,
         returner: selected.returner,
+        returnMiss: selected.returnMiss,
         server: selected.server // Use separate server field
       };
       
@@ -212,6 +281,7 @@ function confirmInput() {
       const pt = (g.points[modal.pointIndex] as any) || {};
       pt.actor = selected.actor;
       pt.returner = selected.returner;
+      pt.returnMiss = selected.returnMiss;
       g.points[modal.pointIndex] = pt;
       return copy;
     });
@@ -300,6 +370,87 @@ function confirmInput() {
   function allPlayerNames(): string[] {
     if (mode === "singles") return [playerA, playerB];
     return [playerA1, playerA2, playerB1, playerB2];
+  }
+
+  function receivingTeamPlayers(receiverTeam: Core.Player): string[] {
+    if (mode === "singles") return [receiverTeam === "A" ? playerA : playerB];
+    return receiverTeam === "A" ? [playerA1, playerA2] : [playerB1, playerB2];
+  }
+
+  function resolveReturnerName(
+    returnerFromPoint: string | undefined,
+    receiverTeam: Core.Player,
+    actor: string | undefined
+  ): string | null {
+    const receivers = receivingTeamPlayers(receiverTeam);
+    if (mode === "singles") return receivers[0];
+    if (returnerFromPoint && receivers.includes(returnerFromPoint)) return returnerFromPoint;
+    if (actor && receivers.includes(actor)) return actor;
+    return null;
+  }
+
+  function isReturnMiss(
+    notation: string,
+    isServiceAce: boolean,
+    serverWon: boolean,
+    returnerName: string,
+    actor: string | undefined,
+    returnMiss?: boolean
+  ): boolean {
+    if (isServiceAce) return true;
+    if (returnMiss === true) return true;
+    if (returnMiss === false) return false;
+    if (!serverWon) return false;
+    const isReturnShotMiss = /[FB]R[ON]$/.test(notation);
+    const isError = /[ON]$/.test(notation);
+    if (actor === returnerName && (isReturnShotMiss || isError)) return true;
+    return false;
+  }
+
+  function trackReturnStats(
+    indiv: Record<string, ReturnStats>,
+    point: { player: Core.Player; notation: string; actor?: string; returner?: string; returnMiss?: boolean },
+    receiverTeam: Core.Player,
+    serveKind: "first" | "second",
+    isServiceAce: boolean
+  ) {
+    const returnerName = resolveReturnerName(point.returner, receiverTeam, point.actor);
+    if (!returnerName) return;
+
+    const serverWon = point.player !== receiverTeam;
+    const returnMiss = isReturnMiss(
+      point.notation,
+      isServiceAce,
+      serverWon,
+      returnerName,
+      point.actor,
+      point.returnMiss
+    );
+
+    if (serveKind === "first") {
+      indiv[returnerName].firstReturnOpportunities++;
+      if (returnMiss) indiv[returnerName].firstReturnOut++;
+      else {
+        indiv[returnerName].firstReturnIn++;
+        if (point.player === receiverTeam) indiv[returnerName].firstReturnPointsWon++;
+      }
+    } else {
+      indiv[returnerName].secondReturnOpportunities++;
+      if (returnMiss) indiv[returnerName].secondReturnOut++;
+      else {
+        indiv[returnerName].secondReturnIn++;
+        if (point.player === receiverTeam) indiv[returnerName].secondReturnPointsWon++;
+      }
+    }
+  }
+
+  function returnInPct(inCount: number, outCount: number): string {
+    const attempts = inCount + outCount;
+    return attempts > 0 ? ((inCount / attempts) * 100).toFixed(1) + "%" : "0.0%";
+  }
+
+  function returnWinPct(won: number, opportunities: number): string {
+    return opportunities > 0 ? ((won / opportunities) * 100).toFixed(1) + "%" : "0.0%";
   }
 
   function setServer(gameIndex: number, team: Core.Player, playerName?: string) {
@@ -737,37 +888,19 @@ function calculateStats() {
           indiv[servingPlayerName].firstServeMakes++;
         }
 
-        // Track return stats for receiver(s) - only if serve was in
-        const returnerFromPoint = (point as any).returner as string | undefined;
-        let receiverNames: string[];
-        
-        if (mode === "doubles" && returnerFromPoint) {
-          // In doubles, use the specific returner if recorded
-          receiverNames = [returnerFromPoint];
-        } else if (mode === "singles") {
-          // In singles, use the receiving player
-          receiverNames = [receiverTeam === "A" ? playerA : playerB];
-        } else {
-          // Fallback: distribute to both players on receiving team (shouldn't happen if returner is always set)
-          receiverNames = receiverTeam === "A" ? [playerA1, playerA2] : [playerB1, playerB2];
-        }
-        
-        receiverNames.forEach((receiverName) => {
-          indiv[receiverName].firstReturnOpportunities++;
-          
-          if (isServiceAce) {
-            // Return was out (couldn't return the ace)
-            indiv[receiverName].firstReturnOut++;
-          } else {
-            // Return was in
-            indiv[receiverName].firstReturnIn++;
-            
-            // Check if receiver won the point
-            if (point.player === receiverTeam) {
-              indiv[receiverName].firstReturnPointsWon++;
-            }
-          }
-        });
+        trackReturnStats(
+          indiv,
+          {
+            player: point.player,
+            notation: point.notation,
+            actor: (point as any).actor,
+            returner: (point as any).returner,
+            returnMiss: (point as any).returnMiss,
+          },
+          receiverTeam,
+          "first",
+          isServiceAce
+        );
 
         if (point.player === serverTeam) {
           // server's side won the point on 1st serve
@@ -792,37 +925,19 @@ function calculateStats() {
             indiv[servingPlayerName].secondServeMakes++;
           }
 
-          // Track return stats for receiver(s) on second serve - only if serve was in (not DF)
-          const returnerFromPoint = (point as any).returner as string | undefined;
-          let receiverNames: string[];
-          
-          if (mode === "doubles" && returnerFromPoint) {
-            // In doubles, use the specific returner if recorded
-            receiverNames = [returnerFromPoint];
-          } else if (mode === "singles") {
-            // In singles, use the receiving player
-            receiverNames = [receiverTeam === "A" ? playerA : playerB];
-          } else {
-            // Fallback: distribute to both players on receiving team
-            receiverNames = receiverTeam === "A" ? [playerA1, playerA2] : [playerB1, playerB2];
-          }
-          
-          receiverNames.forEach((receiverName) => {
-            indiv[receiverName].secondReturnOpportunities++;
-            
-            if (isServiceAce) {
-              // Return was out (couldn't return the ace)
-              indiv[receiverName].secondReturnOut++;
-            } else {
-              // Return was in
-              indiv[receiverName].secondReturnIn++;
-              
-              // Check if receiver won the point
-              if (point.player === receiverTeam) {
-                indiv[receiverName].secondReturnPointsWon++;
-              }
-            }
-          });
+          trackReturnStats(
+            indiv,
+            {
+              player: point.player,
+              notation: point.notation,
+              actor: (point as any).actor,
+              returner: (point as any).returner,
+              returnMiss: (point as any).returnMiss,
+            },
+            receiverTeam,
+            "second",
+            isServiceAce
+          );
 
           if (point.player === serverTeam) {
             // server's side won the point on 2nd serve
@@ -899,31 +1014,19 @@ function calculateStats() {
         firstServeMakes[serverTeam]++;
         indiv[servingPlayerName].firstServeMakes++;
         
-        // Track return stats
-        const returnerFromPoint = point.returner as string | undefined;
-        let receiverNames: string[];
-        
-        if (mode === "doubles" && returnerFromPoint) {
-          receiverNames = [returnerFromPoint];
-        } else if (mode === "singles") {
-          receiverNames = [receiverTeam === "A" ? playerA : playerB];
-        } else {
-          receiverNames = receiverTeam === "A" ? [playerA1, playerA2] : [playerB1, playerB2];
-        }
-        
-        receiverNames.forEach((receiverName) => {
-          indiv[receiverName].firstReturnOpportunities++;
-          
-          if (isServiceAce) {
-            indiv[receiverName].firstReturnOut++;
-          } else {
-            indiv[receiverName].firstReturnIn++;
-            
-            if (point.player === receiverTeam) {
-              indiv[receiverName].firstReturnPointsWon++;
-            }
-          }
-        });
+        trackReturnStats(
+          indiv,
+          {
+            player: point.player,
+            notation: point.notation,
+            actor: point.actor,
+            returner: point.returner,
+            returnMiss: point.returnMiss,
+          },
+          receiverTeam,
+          "first",
+          isServiceAce
+        );
 
         if (point.player === serverTeam) {
           firstServeWins[serverTeam]++;
@@ -964,15 +1067,15 @@ function calculateStats() {
       firstReturnIn: data.firstReturnIn,
       firstReturnOut: data.firstReturnOut,
       firstReturnOpportunities: data.firstReturnOpportunities,
-      firstReturnInPct: data.firstReturnOpportunities > 0 ? ((data.firstReturnIn / data.firstReturnOpportunities) * 100).toFixed(1) + "%" : "0.0%",
+      firstReturnInPct: returnInPct(data.firstReturnIn, data.firstReturnOut),
       firstReturnPointsWon: data.firstReturnPointsWon,
-      firstReturnWinPct: data.firstReturnOpportunities > 0 ? ((data.firstReturnPointsWon / data.firstReturnOpportunities) * 100).toFixed(1) + "%" : "0.0%",
+      firstReturnWinPct: returnWinPct(data.firstReturnPointsWon, data.firstReturnOpportunities),
       secondReturnIn: data.secondReturnIn,
       secondReturnOut: data.secondReturnOut,
       secondReturnOpportunities: data.secondReturnOpportunities,
-      secondReturnInPct: data.secondReturnOpportunities > 0 ? ((data.secondReturnIn / data.secondReturnOpportunities) * 100).toFixed(1) + "%" : "0.0%",
+      secondReturnInPct: returnInPct(data.secondReturnIn, data.secondReturnOut),
       secondReturnPointsWon: data.secondReturnPointsWon,
-      secondReturnWinPct: data.secondReturnOpportunities > 0 ? ((data.secondReturnPointsWon / data.secondReturnOpportunities) * 100).toFixed(1) + "%" : "0.0%",
+      secondReturnWinPct: returnWinPct(data.secondReturnPointsWon, data.secondReturnOpportunities),
     };
   }
 
@@ -1766,13 +1869,59 @@ function exportPDF() {
                       key={v}
                       className={"btn"}
                       style={{ background: selected.result === v ? "#007bff" : "#fff", color: selected.result === v ? "#fff" : "#007bff", padding: "6px 12px" }}
-                      onClick={() => setSelected((s) => ({ ...s, result: v }))}
+                      onClick={() =>
+                        setSelected((s) => ({
+                          ...s,
+                          result: v,
+                          returnMiss: v === "O" || v === "N" ? s.returnMiss : undefined,
+                        }))
+                      }
                     >
                       {v === "A" ? "Ace" : v === "O" ? "Out" : "Net"}
                     </button>
                   ))}
                 </div>
               </div>
+
+              {(selected.result === "O" || selected.result === "N") && (
+                <div style={{ gridColumn: "1 / -1", border: "1px solid #ddd", padding: 8, borderRadius: 4, background: "#f8f9fa" }}>
+                  <h4 style={{ margin: "0 0 8px 0", fontSize: 14, color: "#666" }}>Return mistake?</h4>
+                  <p style={{ margin: "0 0 8px 0", fontSize: 12, color: "#888" }}>
+                    Distinguishes a missed return from an error later in the rally (affects return %).
+                  </p>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <button
+                      className="btn"
+                      style={{
+                        background: selected.returnMiss === true ? "#007bff" : "#fff",
+                        color: selected.returnMiss === true ? "#fff" : "#007bff",
+                        padding: "6px 12px",
+                      }}
+                      onClick={() => setSelected((s) => ({ ...s, returnMiss: true }))}
+                    >
+                      Yes — missed the return
+                    </button>
+                    <button
+                      className="btn"
+                      style={{
+                        background: selected.returnMiss === false ? "#007bff" : "#fff",
+                        color: selected.returnMiss === false ? "#fff" : "#007bff",
+                        padding: "6px 12px",
+                      }}
+                      onClick={() => setSelected((s) => ({ ...s, returnMiss: false }))}
+                    >
+                      No — error after rally
+                    </button>
+                    <button
+                      className="btn secondary"
+                      style={{ padding: "6px 12px" }}
+                      onClick={() => setSelected((s) => ({ ...s, returnMiss: undefined }))}
+                    >
+                      Unset
+                    </button>
+                  </div>
+                </div>
+              )}
 
 {/* Server selection - only in tie breaks */}
 {modal?.isTieBreak && (

@@ -4,6 +4,11 @@ export type Player = "A" | "B";
 export interface Point {
   player: Player;
   notation: string; // e.g., 'FSO' (Forehand Stroke Out)
+  actor?: string;
+  returner?: string;
+  /** true = missed the return; false = return was in, error happened later in rally */
+  returnMiss?: boolean;
+  server?: string;
 }
 
 export interface Game {
